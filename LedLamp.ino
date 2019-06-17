@@ -54,7 +54,7 @@ void setup() {
     gizmo.setUpdateURL(SW_UPDATE_URL);
 
     gizmo.setCallback(mqttCallback);
-    gizmo.addTopic("%s");
+    gizmo.addTopic("%s/all");
     gizmo.addTopic("%s/all/rgb");
     gizmo.addTopic("%s/all/brightness");
     gizmo.addTopic("%s/all/effect");
@@ -79,7 +79,7 @@ void setupLED() {
     front.ctl = &FastLED.addLeds<LED_TYPE, FRONT_PIN, COLOR_ORDER>(frontLeds, LED_COUNT).setCorrection(TypicalLEDStrip);
     fadeToBlackBy(frontLeds, LED_COUNT, 255);
     front.ctl->showLeds(front.brightness);
-    front.pattern = findPattern("confetti");
+    front.pattern = findPattern("glitter");
 
     back.ctl = &FastLED.addLeds<LED_TYPE, BACK_PIN, COLOR_ORDER>(backLeds, LED_COUNT).setCorrection(TypicalLEDStrip);
     fadeToBlackBy(backLeds, LED_COUNT, 255);
@@ -87,18 +87,20 @@ void setupLED() {
     back.pattern = findPattern("glitter");
 }
 
-// TODO: use ESPGizmo to do this
-void publishState(const char *topic, const char *value, Strip *strip) {
-    char stateTopic[64];
-    snprintf(stateTopic, 64, "%s/%s%s", gizmo.getTopicPrefix(), strip->name, topic);
-    gizmo.publish(stateTopic, (char *) value);
-}
-
+// Command processors
 void processOnOff(char *value, Strip *strip) {
     strip->on = !strcmp(value, "on");
-    if (strip->on && strip->brightness == 0) {
-        strip->brightness = 64;
-    }
+}
+
+CRGB colorFromCSV(char *csv) {
+    uint8_t r, g, b;
+    char *p = strtok(csv, ",");
+    r = p ? atoi(p) : 0;
+    p = strtok(NULL, ",");
+    g = p ? atoi(p) : 0;
+    p = strtok(NULL, ",");
+    b = p ? atoi(p) : 0;
+    return CRGB(r, g, b);
 }
 
 void processColor(char *value, Strip *strip) {
@@ -114,8 +116,23 @@ void processBrightness(char *value, Strip *strip) {
 
 void processEffect(char *value, Strip *strip) {
     strip->pattern = findPattern(value);
+    strip->color = CRGB::Black;
 }
 
+void processCallback(char *topic, char *value, Strip *strip) {
+    if (strstr(topic, "/rgb")) {
+        processColor(value, strip);
+    } else if (strstr(topic, "/brightness")) {
+        processBrightness(value, strip);
+    } else if (strstr(topic, "/effect")) {
+        processEffect(value, strip);
+    } else {
+        processOnOff(value, strip);
+    }
+}
+
+
+// MQTT Callback
 void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     char value[64];
     value[0] = NULL;
@@ -135,31 +152,8 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     }
 }
 
-void processCallback(char *topic, char *value, Strip *strip) {
-    if (strstr(topic, "/rgb")) {
-        processColor(value, strip);
-    } else if (strstr(topic, "/brightness")) {
-        processBrightness(value, strip);
-    } else if (strstr(topic, "/effect")) {
-        processEffect(value, strip);
-    } else {
-        processOnOff(value, strip);
-    }
-}
-
-CRGB colorFromCSV(char *csv) {
-    uint8_t r, g, b;
-    char *p = strtok(csv, ",");
-    r = p ? atoi(p) : 0;
-    p = strtok(NULL, ",");
-    g = p ? atoi(p) : 0;
-    p = strtok(NULL, ",");
-    b = p ? atoi(p) : 0;
-    return CRGB(r, g, b);
-}
-
 void handleLEDs(Strip *strip) {
-    if (strip->pattern) {
+    if (strip->on && strip->pattern) {
         strip->pattern->renderer(strip);
         strip->ctl->showLeds(strip->brightness);
 
@@ -176,6 +170,8 @@ void handleLEDs(Strip *strip) {
 
 void finishWiFiConnect() {
     Serial.printf("%s is ready\n", LED_LIGHTS);
+    front.pattern = findPattern("confetti");
+    back.pattern = findPattern("confetti");
 }
 
 void loop() {
@@ -187,16 +183,6 @@ void loop() {
 void handleRoot() {
     gizmo.httpServer()->send(200, "text/html", "LedLamp!");
 }
-
-void switchOn(boolean o, Strip *strip) {
-    strip->on = o;
-}
-
-void setBrightness(uint8_t b, Strip *strip) {
-    strip->brightness = b;
-}
-
-
 
 // LED Patterns
 void test(Strip *s) {
