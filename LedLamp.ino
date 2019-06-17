@@ -31,6 +31,7 @@ typedef void (*Renderer)(Strip *);
 typedef struct Pattern {
     char        *name;
     Renderer    renderer;
+    uint32_t    pause;
     Pattern     *next;
 } Pattern;
 
@@ -160,10 +161,11 @@ void handleLEDs(Strip *strip) {
         strip->pattern->renderer(strip);
         strip->ctl->showLeds(strip->brightness);
 
-        EVERY_N_MILLISECONDS(20)
-            { strip->hue++; } // slowly cycle the "base color" through the rainbow
-        //    EVERY_N_SECONDS(15)
-        //    { nextPattern(); } // change patterns periodically
+        // Sets initial timing only. Changes here don't do anything
+        EVERY_N_MILLIS_I(ticktimer, 20) {
+            strip->hue++; // slowly cycle the "base color" through the rainbow
+            ticktimer.setPeriod(strip->pattern->pause);
+        }
 
     } else {
         fill_solid(strip->leds, LED_COUNT, strip->color);
@@ -212,6 +214,10 @@ void addGlitter(Strip *s, fract8 chanceOfGlitter) {
     if (random8() < chanceOfGlitter) {
         s->leds[random16(LED_COUNT)] += CRGB::White;
     }
+}
+
+void cycle(Strip *s) {
+    fill_solid(s->leds, LED_COUNT, CHSV(s->hue, 200, 255));
 }
 
 void confetti(Strip *s) {
@@ -286,16 +292,17 @@ void fire(Strip *s) {
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
-        Pattern{ .name = "glitter", .renderer = glitter },
-        Pattern{ .name = "confetti", .renderer = confetti },
-        Pattern{ .name = "rainbow", .renderer = rainbow },
-        Pattern{ .name = "rainbowWithGlitter", .renderer = rainbowWithGlitter },
-        Pattern{ .name = "sinelon", .renderer = sinelon },
-        Pattern{ .name = "juggle", .renderer = juggle },
-        Pattern{ .name = "bpm", .renderer = bpm },
-        Pattern{ .name = "fire", .renderer = fire },
+        Pattern{ .name = "glitter", .renderer = glitter, .pause = 20 },
+        Pattern{ .name = "confetti", .renderer = confetti, .pause = 20 },
+        Pattern{ .name = "cycle", .renderer = cycle, .pause = 200 },
+        Pattern{ .name = "rainbow", .renderer = rainbow, .pause = 20 },
+        Pattern{ .name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .pause = 20 },
+        Pattern{ .name = "sinelon", .renderer = sinelon, .pause = 20 },
+        Pattern{ .name = "juggle", .renderer = juggle, .pause = 20 },
+        Pattern{ .name = "bpm", .renderer = bpm, .pause = 20 },
+        Pattern{ .name = "fire", .renderer = fire, .pause = 20 },
 
-        Pattern{ .name = "test", .renderer = test }
+        Pattern{ .name = "test", .renderer = test, .pause = 20 }
 };
 
 Pattern *findPattern(char *name) {
