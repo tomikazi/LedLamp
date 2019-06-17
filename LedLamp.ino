@@ -2,7 +2,7 @@
 #include <NeoPixelFader.h>
 #include <FS.h>
 
-#include "LedLampHTML.h"
+#include <FastLED.h>
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
@@ -10,92 +10,81 @@
 
 #define LED_DATA   "cfg/led"
 
-#define TRANSITION_STEPS    64
-#define TRANSITION_DELAY     2
+#define FRONT_PIN       4
+#define BACK_PIN        5
 
-static Adafruit_NeoPixel frontBase = Adafruit_NeoPixel();
-static NeoPixelFader frontFader = NeoPixelFader();
+#define LED_COUNT               60
+#define LED_TYPE                WS2812B
+#define COLOR_ORDER             GRB
+#define BRIGHTNESS              96
+#define FRAMES_PER_SECOND       60
 
-static Adafruit_NeoPixel backBase = Adafruit_NeoPixel();
-static NeoPixelFader backFader = NeoPixelFader();
+CRGB frontLeds[LED_COUNT];
+CRGB backLeds[LED_COUNT];
 
-typedef struct {
-    char *name;
-    Adafruit_NeoPixel *base;
-    NeoPixelFader *fader;
-    int ledPin, ledOffset, ledCount;
-    boolean changed;
-    uint32_t color;
+typedef struct StripRec Strip;
+
+// Pattern renderer function type.
+typedef void (*Renderer)(Strip *);
+
+// Pattern record
+typedef struct Pattern {
+    char        *name;
+    Renderer    renderer;
+    Pattern     *next;
+} Pattern;
+
+struct StripRec {
+    char    *name;
+    bool    on;
+    CRGB    color;
     uint8_t brightness;
-    boolean on;
-    boolean testOn;
-} Strip;
+    CRGB    *leds;
+    Pattern *pattern;
+    uint8_t hue;
+    CLEDController *ctl;
+};
 
-static Strip frontStrip = { .name = "front", .base = &frontBase, .fader = &frontFader };
-static Strip backStrip = { .name = "back", .base = &backBase, .fader = &backFader };
+Strip front = { .name = "front", .on = true, .color = CRGB::White, .brightness = BRIGHTNESS, .leds = &frontLeds[0] };
+Strip back = { .name = "back", .on = true, .color = CRGB::White, .brightness = BRIGHTNESS, .leds = &backLeds[0] };
+
 
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, PASSKEY);
     gizmo.setUpdateURL(SW_UPDATE_URL);
 
     gizmo.setCallback(mqttCallback);
+    gizmo.addTopic("%s");
+    gizmo.addTopic("%s/all/rgb");
+    gizmo.addTopic("%s/all/brightness");
+    gizmo.addTopic("%s/all/effect");
+
     gizmo.addTopic("%s/front");
     gizmo.addTopic("%s/front/rgb");
     gizmo.addTopic("%s/front/brightness");
-    gizmo.addTopic("%s/front/test");
+    gizmo.addTopic("%s/front/effect");
 
     gizmo.addTopic("%s/back");
     gizmo.addTopic("%s/back/rgb");
     gizmo.addTopic("%s/back/brightness");
-    gizmo.addTopic("%s/back/test");
+    gizmo.addTopic("%s/back/effect");
 
     gizmo.httpServer()->on("/", handleRoot);
-    gizmo.httpServer()->on("/led", handleLEDPage);
-    gizmo.httpServer()->on("/ledcfg", handleLEDConfig);
 
     setupLED();
     gizmo.endSetup();
 }
 
 void setupLED() {
-    loadLEDConfig(LED_DATA "front", &frontStrip);
-    loadLEDConfig(LED_DATA "back", &backStrip);
-    setupBase();
-    setupStrip(&frontStrip);
-    setupStrip(&backStrip);
+    front.ctl = &FastLED.addLeds<LED_TYPE, FRONT_PIN, COLOR_ORDER>(frontLeds, LED_COUNT).setCorrection(TypicalLEDStrip);
+    fadeToBlackBy(frontLeds, LED_COUNT, 255);
+    front.ctl->showLeds(front.brightness);
+    front.pattern = findPattern("confetti");
 
-    Serial.printf("front: %d %d %d\n", frontStrip.ledPin, frontStrip.ledOffset, frontStrip.ledCount);
-    Serial.printf("back: %d %d %d\n", backStrip.ledPin, backStrip.ledOffset, backStrip.ledCount);
-}
-
-void setupBase() {
-    if (frontStrip.ledPin) {
-        frontBase.setPin(frontStrip.ledPin);
-        frontBase.updateType(NEO_GRB + NEO_KHZ800);
-        frontBase.updateLength(frontStrip.ledCount);
-    }
-    if (backStrip.ledPin) {
-        backBase.setPin(backStrip.ledPin);
-        backBase.updateType(NEO_GRB + NEO_KHZ800);
-        backBase.updateLength(backStrip.ledCount);
-    }
-
-    if (frontStrip.ledPin && !backStrip.ledPin) {
-        backStrip.base = &frontBase;
-        frontBase.updateLength(frontStrip.ledCount + backStrip.ledCount);
-    }
-}
-
-void setupStrip(Strip *strip) {
-    if (strip->ledCount) {
-        strip->fader->map(*strip->base, strip->ledOffset, strip->ledOffset + strip->ledCount - 1);
-        strip->fader->begin();
-        strip->fader->clear();
-        strip->changed = true;
-        strip->color = strip->fader->ColorFromCSV("255,255,255", false);
-        strip->brightness = 16;
-        strip->on = true;
-    }
+    back.ctl = &FastLED.addLeds<LED_TYPE, BACK_PIN, COLOR_ORDER>(backLeds, LED_COUNT).setCorrection(TypicalLEDStrip);
+    fadeToBlackBy(backLeds, LED_COUNT, 255);
+    back.ctl->showLeds(back.brightness);
+    back.pattern = findPattern("glitter");
 }
 
 // TODO: use ESPGizmo to do this
@@ -106,31 +95,25 @@ void publishState(const char *topic, const char *value, Strip *strip) {
 }
 
 void processOnOff(char *value, Strip *strip) {
-    boolean wasOn = strip->on;
     strip->on = !strcmp(value, "on");
     if (strip->on && strip->brightness == 0) {
         strip->brightness = 64;
     }
-    strip->changed = wasOn != strip->on;
 }
 
 void processColor(char *value, Strip *strip) {
-    uint32_t oldColor = strip->color;
-    strip->color = strip->fader->ColorFromCSV(value, false);
-    strip->changed = oldColor != strip->color;
+    strip->on = true;
+    strip->color = colorFromCSV(value);
+    strip->pattern = NULL;
 }
 
 void processBrightness(char *value, Strip *strip) {
-    uint8_t oldBrightness = strip->brightness;
     strip->brightness = atoi(value);
     strip->on = strip->brightness != 0;
-    strip->changed = oldBrightness != strip->brightness;
 }
 
-void processTest(char *value, Strip *strip) {
-    boolean wasTestOn = strip->testOn;
-    strip->testOn = !strcmp(value, "on");
-    strip->changed = wasTestOn != strip->testOn;
+void processEffect(char *value, Strip *strip) {
+    strip->pattern = findPattern(value);
 }
 
 void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
@@ -140,10 +123,13 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
 
     Serial.printf("%s: %s\n", topic, value);
 
-    if (strstr(topic, "/front")) {
-        processCallback(topic, value, &frontStrip);
+    if (strstr(topic, "/all")) {
+        processCallback(topic, value, &front);
+        processCallback(topic, value, &back);
+    } else if (strstr(topic, "/front")) {
+        processCallback(topic, value, &front);
     } else if (strstr(topic, "/back")) {
-        processCallback(topic, value, &backStrip);
+        processCallback(topic, value, &back);
     } else {
         gizmo.handleMQTTMessage(topic, value);
     }
@@ -154,43 +140,37 @@ void processCallback(char *topic, char *value, Strip *strip) {
         processColor(value, strip);
     } else if (strstr(topic, "/brightness")) {
         processBrightness(value, strip);
-    } else if (strstr(topic, "/test")) {
-        processTest(value, strip);
+    } else if (strstr(topic, "/effect")) {
+        processEffect(value, strip);
     } else {
         processOnOff(value, strip);
     }
 }
 
-uint32_t color(uint8_t r, uint8_t g, uint8_t b) {
-    return frontStrip.fader->Color(r, g, b);
+CRGB colorFromCSV(char *csv) {
+    uint8_t r, g, b;
+    char *p = strtok(csv, ",");
+    r = p ? atoi(p) : 0;
+    p = strtok(NULL, ",");
+    g = p ? atoi(p) : 0;
+    p = strtok(NULL, ",");
+    b = p ? atoi(p) : 0;
+    return CRGB(r, g, b);
 }
 
 void handleLEDs(Strip *strip) {
-    if (strip->changed) {
-        if (strip->testOn) {
-            // Test pattern
-            strip->fader->fill(color(32, 32, 32));
-            strip->fader->setPixelColor(0, color(0, 255, 0));
-            strip->fader->setPixelColor(strip->ledCount - 1, color(255, 0, 0));
-            strip->fader->setBrightness(255);
-            publishState("", "on", strip);
+    if (strip->pattern) {
+        strip->pattern->renderer(strip);
+        strip->ctl->showLeds(strip->brightness);
 
-        } else if (strip->on) {
-            strip->fader->setBrightness(strip->brightness);
-            strip->fader->fill(strip->color);
+        EVERY_N_MILLISECONDS(20)
+            { strip->hue++; } // slowly cycle the "base color" through the rainbow
+        //    EVERY_N_SECONDS(15)
+        //    { nextPattern(); } // change patterns periodically
 
-            char num[16];
-            publishState("/state", "on", strip);
-            publishState("/rgb/state", strip->fader->ColorToCSV(strip->color, num), strip);
-
-            snprintf(num, 4, "%d", strip->brightness);
-            publishState("/brightness/state", num, strip);
-        } else {
-            strip->fader->setBrightness(0);
-            publishState("/state", "off", strip);
-        }
-        strip->fader->show();
-        strip->changed = false;
+    } else {
+        fill_solid(strip->leds, LED_COUNT, strip->color);
+        strip->ctl->showLeds(strip->on ? strip->brightness : 0);
     }
 }
 
@@ -200,86 +180,143 @@ void finishWiFiConnect() {
 
 void loop() {
     gizmo.isNetworkAvailable(finishWiFiConnect);
-    handleLEDs(&frontStrip);
-    handleLEDs(&backStrip);
+    handleLEDs(&front);
+    handleLEDs(&back);
 }
 
 void handleRoot() {
-    snprintf(html, MAX_HTML, INDEX_HTML, gizmo.getHostname(),
-             gizmo.getHostname(),
-             frontStrip.on ? "true" : "false", frontStrip.color, frontStrip.brightness, frontStrip.ledPin, frontStrip.ledOffset, frontStrip.ledCount,
-             gizmo.getHostname(),
-             backStrip.on ? "true" : "false", backStrip.color, backStrip.brightness, backStrip.ledPin, backStrip.ledOffset, backStrip.ledCount,
-             gizmo.getTopicPrefix(), SW_VERSION);
-    gizmo.httpServer()->send(200, "text/html", html);
-}
-
-void handleLEDPage() {
-    char nets[MAX_HTML/2];
-    snprintf(html, MAX_HTML, LED_HTML,
-             frontStrip.ledPin, frontStrip.ledOffset, frontStrip.ledCount,
-             backStrip.ledPin, backStrip.ledOffset, backStrip.ledCount);
-    gizmo.httpServer()->send(200, "text/html", html);
-}
-
-void handleLEDConfig() {
-    char num[8];
-    strncpy(num, gizmo.httpServer()->arg("upin").c_str(), 7);
-    frontStrip.ledPin = atoi(num);
-    strncpy(num, gizmo.httpServer()->arg("uoffset").c_str(), 7);
-    frontStrip.ledOffset = atoi(num);
-    strncpy(num, gizmo.httpServer()->arg("ucount").c_str(), 7);
-    frontStrip.ledCount = atoi(num);
-
-    strncpy(num, gizmo.httpServer()->arg("lpin").c_str(), 7);
-    backStrip.ledPin = atoi(num);
-    strncpy(num, gizmo.httpServer()->arg("loffset").c_str(), 7);
-    backStrip.ledOffset = atoi(num);
-    strncpy(num, gizmo.httpServer()->arg("lcount").c_str(), 7);
-    backStrip.ledCount = atoi(num);
-
-    Serial.println("Reconfiguring LEDS");
-    Serial.printf("front: %d %d %d\n", frontStrip.ledPin, frontStrip.ledOffset, frontStrip.ledCount);
-    Serial.printf("back: %d %d %d\n", backStrip.ledPin, backStrip.ledOffset, backStrip.ledCount);
-    snprintf(html, MAX_HTML, LEDCFG_HTML);
-
-    gizmo.httpServer()->send(200, "text/html", html);
-    saveLEDConfig(LED_DATA "front", &frontStrip);
-    saveLEDConfig(LED_DATA "back", &backStrip);
-    gizmo.scheduleRestart();
-}
-
-void loadLEDConfig(char *fileName, Strip *strip) {
-    File f = SPIFFS.open(fileName, "r");
-    if (f) {
-        char num[8];
-        int l = f.readBytesUntil('|', num, 7);
-        num[l] = NULL;
-        strip->ledPin = atoi(num);
-        l = f.readBytesUntil('|', num, 7);
-        num[l] = NULL;
-        strip->ledOffset = atoi(num);
-        l = f.readBytesUntil('|', num, 7);
-        num[l] = NULL;
-        strip->ledCount = atoi(num);
-        f.close();
-    }
-}
-
-void saveLEDConfig(char *fileName, Strip *strip) {
-    File f = SPIFFS.open(fileName, "w");
-    if (f) {
-        f.printf("%d|%d|%d\n", strip->ledPin, strip->ledOffset, strip->ledCount);
-        f.close();
-    }
+    gizmo.httpServer()->send(200, "text/html", "LedLamp!");
 }
 
 void switchOn(boolean o, Strip *strip) {
-    strip->changed = strip->on != o;
     strip->on = o;
 }
 
 void setBrightness(uint8_t b, Strip *strip) {
-    strip->changed = b != strip->brightness;
     strip->brightness = b;
+}
+
+
+
+// LED Patterns
+void test(Strip *s) {
+    fill_solid(s->leds, LED_COUNT, CRGB::White);
+    s->leds[0] = CRGB::Green;
+    s->leds[LED_COUNT-1] = CRGB::Red;
+}
+
+void glitter(Strip *s) {
+    fadeToBlackBy(s->leds, LED_COUNT, 20);
+    addGlitter(s, 80);
+}
+
+void rainbow(Strip *s) {
+    fill_rainbow(s->leds, LED_COUNT, s->hue, 7);
+}
+
+void rainbowWithGlitter(Strip *s) {
+    rainbow(s);
+    addGlitter(s, 80);
+}
+
+void addGlitter(Strip *s, fract8 chanceOfGlitter) {
+    if (random8() < chanceOfGlitter) {
+        s->leds[random16(LED_COUNT)] += CRGB::White;
+    }
+}
+
+void confetti(Strip *s) {
+    // random colored speckles that blink in and fade smoothly
+    fadeToBlackBy(s->leds, LED_COUNT, 10);
+    int pos = random16(LED_COUNT);
+    s->leds[pos] += CHSV(s->hue + random8(64), 200, 255);
+}
+
+void sinelon(Strip *s) {
+    // a colored dot sweeping back and forth, with fading trails
+    fadeToBlackBy(s->leds, LED_COUNT, 20);
+    int pos = beatsin16(13, 0, LED_COUNT - 1);
+    s->leds[pos] += CHSV(s->hue, 255, 192);
+}
+
+void bpm(Strip *s) {
+    // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
+    uint8_t BeatsPerMinute = 62;
+    CRGBPalette16 palette = PartyColors_p;
+    uint8_t beat = beatsin8(BeatsPerMinute, 64, 255);
+    for (int i = 0; i < LED_COUNT; i++) { //9948
+        s->leds[i] = ColorFromPalette(palette, s->hue + (i * 2), beat - s->hue + (i * 10));
+    }
+}
+
+void juggle(Strip *s) {
+    // eight colored dots, weaving in and out of sync with each other
+    fadeToBlackBy(s->leds, LED_COUNT, 20);
+    byte dothue = 0;
+    for (int i = 0; i < 8; i++) {
+        s->leds[beatsin16(i + 7, 0, LED_COUNT - 1)] |= CHSV(dothue, 200, 255);
+        dothue += 32;
+    }
+}
+
+
+// COOLING: How much does the air cool as it rises?
+// Less cooling = taller flames.  More cooling = shorter flames.
+// Default 50, suggested range 20-100
+#define COOLING  75
+
+// SPARKING: What chance (out of 255) is there that a new spark will be lit?
+// Higher chance = more roaring fire.  Lower chance = more flickery fire.
+// Default 120, suggested range 50-200.
+#define SPARKING 100
+
+void fire(Strip *s) {
+    // Array of temperature readings at each simulation cell
+    static byte heat[LED_COUNT];
+
+    // Step 1.  Cool down every cell a little
+    for (int i = 0; i < LED_COUNT; i++) {
+        heat[i] = qsub8(heat[i], random8(0, ((COOLING * 10) / LED_COUNT) + 2));
+    }
+
+    // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+    for (int k = LED_COUNT - 1; k >= 2; k--) {
+        heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2]) / 3;
+    }
+
+    // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
+    if (random8() < SPARKING) {
+        int y = random8(7);
+        heat[y] = qadd8(heat[y], random8(160, 255));
+    }
+
+    // Step 4.  Map from heat cells to LED colors
+    for (int j = 0; j < LED_COUNT; j++) {
+        s->leds[j] = HeatColor(heat[j]);
+    }
+}
+
+
+
+
+// Setup a catalog of the different patterns.
+Pattern patterns[] = {
+        Pattern{ .name = "glitter", .renderer = glitter },
+        Pattern{ .name = "confetti", .renderer = confetti },
+        Pattern{ .name = "rainbow", .renderer = rainbow },
+        Pattern{ .name = "rainbowWithGlitter", .renderer = rainbowWithGlitter },
+        Pattern{ .name = "sinelon", .renderer = sinelon },
+        Pattern{ .name = "juggle", .renderer = juggle },
+        Pattern{ .name = "bpm", .renderer = bpm },
+        Pattern{ .name = "fire", .renderer = fire },
+
+        Pattern{ .name = "test", .renderer = test }
+};
+
+Pattern *findPattern(char *name) {
+    int i = 0;
+    while (strcmp(patterns[i].name, name) && strcmp(patterns[i].name, "test")) {
+        i++;
+    }
+    return &patterns[i];
 }
