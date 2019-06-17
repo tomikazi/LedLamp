@@ -94,8 +94,10 @@ void processOnOff(char *value, Strip *strip) {
 }
 
 CRGB colorFromCSV(char *csv) {
+    char tmp[32];
+    strncpy(tmp, csv, 32);
     uint8_t r, g, b;
-    char *p = strtok(csv, ",");
+    char *p = strtok(tmp, ",");
     r = p ? atoi(p) : 0;
     p = strtok(NULL, ",");
     g = p ? atoi(p) : 0;
@@ -116,8 +118,8 @@ void processBrightness(char *value, Strip *strip) {
 }
 
 void processEffect(char *value, Strip *strip) {
+    strip->on = true;
     strip->pattern = findPattern(value);
-    strip->color = CRGB::Black;
 }
 
 void processCallback(char *topic, char *value, Strip *strip) {
