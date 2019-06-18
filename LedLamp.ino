@@ -45,6 +45,7 @@ struct StripRec {
     uint8_t hue;
     CLEDController *ctl;
     byte    data[LED_COUNT];
+    bool    random;
 };
 
 Strip front = { .name = "front", .on = true, .color = CRGB::White, .brightness = BRIGHTNESS, .leds = &frontLeds[0] };
@@ -120,7 +121,12 @@ void processBrightness(char *value, Strip *strip) {
 
 void processEffect(char *value, Strip *strip) {
     strip->on = true;
-    strip->pattern = findPattern(value);
+    strip->random = !strcmp(value, "random");
+    if (strip->random) {
+        strip->pattern = randomPattern();
+    } else {
+        strip->pattern = findPattern(value);
+    }
 }
 
 void processCallback(char *topic, char *value, Strip *strip) {
@@ -165,6 +171,12 @@ void handleLEDs(Strip *strip) {
         EVERY_N_MILLIS_I(ticktimer, 20) {
             strip->hue++; // slowly cycle the "base color" through the rainbow
             ticktimer.setPeriod(strip->pattern->pause);
+        }
+
+        EVERY_N_SECONDS(60) {
+            if (strip->random) {
+                strip->pattern = randomPattern();
+            }
         }
 
     } else {
@@ -311,4 +323,10 @@ Pattern *findPattern(char *name) {
         i++;
     }
     return &patterns[i];
+}
+
+#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
+
+Pattern *randomPattern() {
+    return &patterns[random8(ARRAY_SIZE(patterns)-1)];
 }
