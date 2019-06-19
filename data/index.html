@@ -1,10 +1,198 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>$Title$</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="app.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="jquery.js"></script>
+    <title>Garage</title>
+
+    <script>
+        $(document).ready(function () {
+            let canvas = document.getElementById('picker');
+            let ctx = canvas.getContext('2d');
+
+            let image = new Image();
+            image.onload = function () {
+                ctx.drawImage(image, 0, 0, image.width, image.height);
+            };
+
+            image.src = "colorpicker.png";
+
+            function send(t, m) {
+                $.ajax({
+                    url: "cmd?t=" + t + "&m=" + m,
+                    cache: false,
+                    dataType: 'text',
+                    success: function () { console.log('Sent'); },
+                    error: function () { console.log('Error'); },
+                    timeout: 3000
+                });
+            }
+
+            $('#picker').click(function (e) {
+                let canvasOffset = $(canvas).offset();
+                let canvasX = Math.floor(e.pageX - canvasOffset.left);
+                let canvasY = Math.floor(e.pageY - canvasOffset.top);
+
+                let imageData = ctx.getImageData(canvasX, canvasY, 1, 1);
+                let pixel = imageData.data;
+                let pixelColor = pixel[0] + "," + pixel[1] + "," + pixel[2];
+                $('.preview').css('backgroundColor', pixelColor);
+
+                console.log('Color: ' + pixelColor);
+                send("/all/rgb", pixelColor);
+            });
+
+            $('.switch input').click(function (e) {
+                 let on = $('.switch input')[0].checked;
+                 send("/all", on ? "on" : "off");
+                console.log(on ? 'Turned on' : 'Turned off');
+
+                let bc = $('#brightness')[0];
+                if (on && bc.value === '0') {
+                    bc.value = '64';
+                    send("/all/brightness", bc.value);
+                }
+            });
+
+            $('#brightness').change(function (e) {
+                let b = this.value;
+                send("/all/brightness", b);
+                console.log('Brightness: ', b);
+            });
+        });
+    </script>
+
+    <style>
+        .noshadow * {
+            -webkit-box-shadow: none !important;
+            -moz-box-shadow: none !important;
+            box-shadow: none !important;
+            -webkit-user-select: none !important;
+        }
+
+        .ui-content {
+            margin-top: 32px;
+            text-align: center;
+        }
+
+        /* The switch - the box around the slider */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        /* Hide default HTML checkbox */
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        /* The slider */
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: .4s;
+            transition: .2s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .2s;
+        }
+
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+
+        input:focus + .slider {
+            box-shadow: 0 0 1px #2196F3;
+        }
+
+        input:checked + .slider:before {
+            -webkit-transform: translateX(26px);
+            -ms-transform: translateX(26px);
+            transform: translateX(26px);
+        }
+
+        /* Rounded sliders */
+        .slider.round {
+            border-radius: 34px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        .brightnesscontainer {
+            position: relative;
+            display: inline-block;
+            width: 300px;
+        }
+
+        .brightness {
+            -webkit-appearance: none;
+            width: 300px;
+            height: 15px;
+            border-radius: 5px;
+            background: #ccc;
+            outline: none;
+            opacity: 0.7;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+        }
+
+        .brightness::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #2196F3;
+            cursor: pointer;
+        }
+
+        .brightness::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #2196F3;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-$END$
+<div data-role="page" class="noshadow">
+    <div data-role="main" class="ui-content">
+        <label class="switch">
+            <input type="checkbox">
+            <span class="slider round"></span>
+        </label>
+        <p>
+        <canvas id="picker" var="1" width="290" height="290"></canvas>
+        <p>
+        <div class="brightnesscontainer">
+            <input type="range" min="0" max="255" value="50" class="brightness" id="brightness">
+        </div>
+    </div>
+</div>
 </body>
 </html>
+

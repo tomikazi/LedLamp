@@ -53,7 +53,7 @@ Strip back = { .name = "back", .on = true, .color = CRGB::White, .brightness = B
 
 
 void setup() {
-    gizmo.beginSetup(LED_LIGHTS, SW_VERSION, PASSKEY);
+    gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "");
     gizmo.setUpdateURL(SW_UPDATE_URL);
 
     gizmo.setCallback(mqttCallback);
@@ -73,6 +73,8 @@ void setup() {
     gizmo.addTopic("%s/back/effect");
 
     gizmo.httpServer()->on("/", handleRoot);
+    gizmo.httpServer()->on("/cmd", handleCommand);
+    gizmo.httpServer()->serveStatic("/", SPIFFS, "/", "max-age=86400");
 
     setupLED();
     gizmo.endSetup();
@@ -198,7 +200,17 @@ void loop() {
 }
 
 void handleRoot() {
-    gizmo.httpServer()->send(200, "text/html", "LedLamp!");
+    File f = SPIFFS.open("/index.html", "r");
+    gizmo.httpServer()->streamFile(f, "text/html");
+    f.close();
+}
+
+void handleCommand() {
+    char t[64], m[64];
+    strncpy(t, gizmo.httpServer()->arg("t").c_str(), 63);
+    strncpy(m, gizmo.httpServer()->arg("m").c_str(), 63);
+    mqttCallback(t, (uint8_t *) m, strlen(m));
+    gizmo.httpServer()->send(200, "text/plain", m);
 }
 
 // LED Patterns
