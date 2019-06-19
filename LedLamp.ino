@@ -29,27 +29,33 @@ typedef void (*Renderer)(Strip *);
 
 // Pattern record
 typedef struct Pattern {
-    char        *name;
-    Renderer    renderer;
-    uint32_t    pause;
-    Pattern     *next;
+    const char *name;
+    Renderer renderer;
+    uint32_t pause;
+    Pattern *next;
 } Pattern;
 
 struct StripRec {
-    char    *name;
-    bool    on;
-    CRGB    color;
+    const char *name;
+    bool on;
+    CRGB color;
     uint8_t brightness;
-    CRGB    *leds;
+    CRGB *leds;
     Pattern *pattern;
     uint8_t hue;
     CLEDController *ctl;
-    byte    data[LED_COUNT];
-    bool    random;
+    bool random;
+    byte data[LED_COUNT];
 };
 
-Strip front = { .name = "front", .on = true, .color = CRGB::White, .brightness = BRIGHTNESS, .leds = &frontLeds[0] };
-Strip back = { .name = "back", .on = true, .color = CRGB::White, .brightness = BRIGHTNESS, .leds = &backLeds[0] };
+Strip front = {
+        .name = "front", .on = true, .color = CRGB::Red, .brightness = BRIGHTNESS,
+        .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL, .random = false,
+};
+Strip back = {
+        .name = "back", .on = true, .color = CRGB::Green, .brightness = BRIGHTNESS,
+        .leds = &backLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL, .random = false
+};
 
 
 void setup() {
@@ -147,7 +153,7 @@ void processCallback(char *topic, char *value, Strip *strip) {
 // MQTT Callback
 void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     char value[64];
-    value[0] = NULL;
+    value[0] = '\0';
     strncat(value, (char *) payload, length);
 
     Serial.printf("%s: %s\n", topic, value);
@@ -170,12 +176,14 @@ void handleLEDs(Strip *strip) {
         strip->ctl->showLeds(strip->brightness);
 
         // Sets initial timing only. Changes here don't do anything
-        EVERY_N_MILLIS_I(ticktimer, 20) {
+        EVERY_N_MILLIS_I(ticktimer, 20)
+        {
             strip->hue++; // slowly cycle the "base color" through the rainbow
             ticktimer.setPeriod(strip->pattern->pause);
         }
 
-        EVERY_N_SECONDS(60) {
+        EVERY_N_SECONDS(60)
+        {
             if (strip->random) {
                 strip->pattern = randomPattern();
             }
@@ -205,19 +213,37 @@ void handleRoot() {
     f.close();
 }
 
+#define STRIP_STATUS "\"%s\": {\"on\": %s,\"rgb\": \"%d,%d,%d\",\"brightness\": %d,\"effect\": \"%s\"}"
+
+char *stripStatus(Strip *s) {
+    static char html[128];
+    snprintf(html, 127, STRIP_STATUS, s->name, s->on ? "true" : "false",
+             s->color.red, s->color.green, s->color.blue, s->brightness,
+             s->pattern ? s->pattern->name : "none");
+    return html;
+}
+
 void handleCommand() {
     char t[64], m[64];
     strncpy(t, gizmo.httpServer()->arg("t").c_str(), 63);
     strncpy(m, gizmo.httpServer()->arg("m").c_str(), 63);
-    mqttCallback(t, (uint8_t *) m, strlen(m));
-    gizmo.httpServer()->send(200, "text/plain", m);
+    if (strcmp(t, "get")) {
+        mqttCallback(t, (uint8_t *) m, strlen(m));
+    }
+
+    gizmo.httpServer()->setContentLength(CONTENT_LENGTH_UNKNOWN);
+    gizmo.httpServer()->send(200, "application/json", "{");
+    gizmo.httpServer()->sendContent(stripStatus(&front));
+    gizmo.httpServer()->sendContent(",");
+    gizmo.httpServer()->sendContent(stripStatus(&back));
+    gizmo.httpServer()->sendContent("}");
 }
 
 // LED Patterns
 void test(Strip *s) {
     fill_solid(s->leds, LED_COUNT, CRGB::White);
     s->leds[0] = CRGB::Green;
-    s->leds[LED_COUNT-1] = CRGB::Red;
+    s->leds[LED_COUNT - 1] = CRGB::Red;
 }
 
 void glitter(Strip *s) {
@@ -313,23 +339,22 @@ void fire(Strip *s) {
 }
 
 
-
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
-        Pattern{ .name = "glitter", .renderer = glitter, .pause = 20 },
-        Pattern{ .name = "confetti", .renderer = confetti, .pause = 20 },
-        Pattern{ .name = "cycle", .renderer = cycle, .pause = 200 },
-        Pattern{ .name = "rainbow", .renderer = rainbow, .pause = 20 },
-        Pattern{ .name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .pause = 20 },
-        Pattern{ .name = "sinelon", .renderer = sinelon, .pause = 20 },
-        Pattern{ .name = "juggle", .renderer = juggle, .pause = 20 },
-        Pattern{ .name = "bpm", .renderer = bpm, .pause = 20 },
-        Pattern{ .name = "fire", .renderer = fire, .pause = 20 },
+        Pattern{.name = "glitter", .renderer = glitter, .pause = 20, .next = NULL },
+        Pattern{.name = "confetti", .renderer = confetti, .pause = 20, .next = NULL },
+        Pattern{.name = "cycle", .renderer = cycle, .pause = 200, .next = NULL },
+        Pattern{.name = "rainbow", .renderer = rainbow, .pause = 20, .next = NULL },
+        Pattern{.name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .pause = 20, .next = NULL },
+        Pattern{.name = "sinelon", .renderer = sinelon, .pause = 20, .next = NULL },
+        Pattern{.name = "juggle", .renderer = juggle, .pause = 20, .next = NULL },
+        Pattern{.name = "bpm", .renderer = bpm, .pause = 20, .next = NULL },
+        Pattern{.name = "fire", .renderer = fire, .pause = 20, .next = NULL },
 
-        Pattern{ .name = "test", .renderer = test, .pause = 20 }
+        Pattern{.name = "test", .renderer = test, .pause = 20, .next = NULL }
 };
 
-Pattern *findPattern(char *name) {
+Pattern *findPattern(const char *name) {
     int i = 0;
     while (strcmp(patterns[i].name, name) && strcmp(patterns[i].name, "test")) {
         i++;
@@ -340,5 +365,5 @@ Pattern *findPattern(char *name) {
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
 Pattern *randomPattern() {
-    return &patterns[random8(ARRAY_SIZE(patterns)-1)];
+    return &patterns[random8(ARRAY_SIZE(patterns) - 1)];
 }

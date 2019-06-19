@@ -18,16 +18,29 @@
             image.onload = function () {
                 ctx.drawImage(image, 0, 0, image.width, image.height);
             };
-
             image.src = "colorpicker.png";
+
+            function process(d) {
+                $('.switch input').prop('checked', d.front.on);
+                $('#brightness').prop('value', d.front.brightness);
+                $('#effect').prop('value', d.front.effect);
+            }
 
             function send(t, m) {
                 $.ajax({
                     url: "cmd?t=" + t + "&m=" + m,
+                    turl: "test.json",
                     cache: false,
-                    dataType: 'text',
-                    success: function () { console.log('Sent'); },
-                    error: function () { console.log('Error'); },
+                    dataType: "json",
+                    success: function (d) {
+                        process(d);
+                        $('#error').text('');
+                        console.log('Sent');
+                    },
+                    error: function (d) {
+                        $('#error').text('Disconnected');
+                        console.log('Error', d);
+                    },
                     timeout: 3000
                 });
             }
@@ -47,14 +60,14 @@
             });
 
             $('.switch input').click(function (e) {
-                 let on = $('.switch input')[0].checked;
+                 let on = $('.switch input').prop('checked');
                  send("/all", on ? "on" : "off");
                 console.log(on ? 'Turned on' : 'Turned off');
 
-                let bc = $('#brightness')[0];
-                if (on && bc.value === '0') {
-                    bc.value = '64';
-                    send("/all/brightness", bc.value);
+                let bc = $('#brightness');
+                if (on && bc.prop('value') === '0') {
+                    bc.prop('value', '64');
+                    send("/all/brightness", bc.prop('value'));
                 }
             });
 
@@ -69,6 +82,9 @@
                 send("/all/effect", f);
                 console.log('Effect: ', f);
             });
+
+            send("get", "status");
+            setInterval(function () { send("get", "status"); }, 5000);
         });
     </script>
 
@@ -83,6 +99,12 @@
         .ui-content {
             margin-top: 32px;
             text-align: center;
+        }
+
+        #error {
+            font-family: Arial, Helvetica, Sans-Serif, serif;
+            height: 24px;
+            color: #a00;
         }
 
         /* The switch - the box around the slider */
@@ -189,20 +211,54 @@
             display: inline-block;
             width: 300px;
         }
+
+
+        .btn-group button {
+            background-color: #ccc; /* Green background */
+            border: 1px solid #2196F3; /* Green border */
+            color: white; /* White text */
+            padding: 10px 24px; /* Some padding */
+            cursor: pointer; /* Pointer/hand icon */
+            float: left; /* Float the buttons side by side */
+        }
+
+        .btn-group button:not(:last-child) {
+            border-right: none; /* Prevent double borders */
+        }
+
+        /* Clear floats (clearfix hack) */
+        .btn-group:after {
+            content: "";
+            clear: both;
+            display: table;
+        }
+
+        /* Add a background color on hover */
+        .btn-group button:hover {
+            background-color: #2196F3;
+        }
     </style>
 </head>
 <body>
 <div data-role="page" class="noshadow">
-    <p><br>
     <div data-role="main" class="ui-content">
+        <p>
+        <div id="error"></div>
+        <p>
         <label class="switch">
-            <input type="checkbox" checked>
+            <input type="checkbox">
             <span class="slider round"></span>
         </label>
         <p>
+        <!--div class="btn-group">
+            <button type="button" class="btn btn-primary">All</button>
+            <button type="button" class="btn btn-primary">Front</button>
+            <button type="button" class="btn btn-primary">Back</button>
+        </div-->
+        <p>
         <div class="effectcontainer">
             <select id="effect">
-                <option value="none">-- Select Effect --</option>
+                <option value="none" selected>-- Select Effect --</option>
                 <option value="random">Cycle Effects Randomly</option>
                 <option value="glitter">Glitter</option>
                 <option value="confetti">Confetti</option>
@@ -220,7 +276,7 @@
         <canvas id="picker" var="1" width="290" height="290"></canvas>
         <p>
         <div class="brightnesscontainer">
-            <input type="range" min="0" max="255" value="96" class="brightness" id="brightness">
+            <input type="range" min="0" max="255" value="0" class="brightness" id="brightness">
         </div>
     </div>
 </div>
