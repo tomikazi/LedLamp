@@ -62,6 +62,12 @@
                 send("/all/brightness", b);
                 console.log('Brightness: ', b);
             });
+
+            $('#effect').change(function (e) {
+                let f = this.value;
+                send("/all/effect", f);
+                console.log('Effect: ', f);
+            });
         });
     </script>
 
@@ -176,20 +182,43 @@
             background: #2196F3;
             cursor: pointer;
         }
+
+        .effectcontainer {
+            position: relative;
+            display: inline-block;
+            width: 300px;
+        }
     </style>
 </head>
 <body>
 <div data-role="page" class="noshadow">
     <div data-role="main" class="ui-content">
         <label class="switch">
-            <input type="checkbox">
+            <input type="checkbox" checked>
             <span class="slider round"></span>
         </label>
+        <p>
+        <div class="effectcontainer">
+            <select id="effect">
+                <option value="none">-- Select Effect --</option>
+                <option value="random">Cycle Effects Randomly</option>
+                <option value="glitter">Glitter</option>
+                <option value="confetti">Confetti</option>
+                <option value="cycle">Slow Cycle</option>
+                <option value="fire">Fire</option>
+                <option value="bpm">Beats</option>
+                <option value="juggle">Juggle</option>
+                <option value="sinelon">Particle</option>
+                <option value="rainbow">Rainbow</option>
+                <option value="rainbowWithGlitter">Rainbbow With Glitter</option>
+                <option value="test">Test Pattern</option>
+            </select>
+        </div>
         <p>
         <canvas id="picker" var="1" width="290" height="290"></canvas>
         <p>
         <div class="brightnesscontainer">
-            <input type="range" min="0" max="255" value="50" class="brightness" id="brightness">
+            <input type="range" min="0" max="255" value="96" class="brightness" id="brightness">
         </div>
     </div>
 </div>
