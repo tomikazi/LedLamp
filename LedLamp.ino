@@ -13,7 +13,7 @@
 #define FRONT_PIN       4
 #define BACK_PIN        5
 
-#define LED_COUNT               60
+#define LED_COUNT               30
 #define LED_TYPE                WS2812B
 #define COLOR_ORDER             GRB
 #define BRIGHTNESS              96
