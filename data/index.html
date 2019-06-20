@@ -38,12 +38,10 @@
                     dataType: "json",
                     success: function (d) {
                         process(d);
-                        $('#error').css('#444');
-                        $('#error').text('');
+                        $('#error').html('');
                     },
                     error: function (d) {
-                        $('#error').css('#a00');
-                        $('#error').text('Disconnected');
+                        $('#error').html('Disconnected');
                     },
                     timeout: 3000
                 });
@@ -119,17 +117,16 @@
             height: 32px;
             padding: 8px 8px 0px 8px;
             background-color: #444;
-            color: #ffffff;
+            color: #ffaf00;
             font-size: 18px;
-
         }
 
         /* The switch - the box around the slider */
         .switch {
             position: relative;
             display: inline-block;
-            width: 60px;
-            height: 34px;
+            width: 100px;
+            height: 40px;
             margin: 16px;
         }
 
@@ -156,8 +153,8 @@
         .slider:before {
             position: absolute;
             content: "";
-            height: 26px;
-            width: 26px;
+            height: 32px;
+            width: 32px;
             left: 4px;
             bottom: 4px;
             background-color: white;
@@ -174,9 +171,9 @@
         }
 
         input:checked + .slider:before {
-            -webkit-transform: translateX(26px);
-            -ms-transform: translateX(26px);
-            transform: translateX(26px);
+            -webkit-transform: translateX(60px);
+            -ms-transform: translateX(60px);
+            transform: translateX(60px);
         }
 
         /* Rounded sliders */
@@ -197,13 +194,14 @@
         .brightness {
             -webkit-appearance: none;
             width: 300px;
-            height: 15px;
+            height: 6px;
             border-radius: 5px;
             background: #ccc;
             outline: none;
             opacity: 0.7;
             -webkit-transition: .2s;
             transition: opacity .2s;
+            margin: 16px 0px;
         }
 
         .brightness::-webkit-slider-thumb {
@@ -227,16 +225,20 @@
         .effectcontainer {
             position: relative;
             display: inline-block;
+            border: 0px;
+            border-radius: 8px;
+            background: #ccc;
+            overflow:hidden;
         }
 
         .effectcontainer select {
-            -webkit-border-radius: 18px;
+            -webkit-border-radius: 8px;
             font-size: 18px;
             background: #ccc;
             border: 0px;
             width: 300px;
-            height: 32px;
-            margin: 16px;
+            height: 40px;
+            outline: none;
         }
 
         .led-selector {
@@ -266,6 +268,10 @@
             border: 0px;
             padding: 10px;
             min-width: 80px;
+        }
+
+        .settings {
+            margin: 64px;
         }
     </style>
 </head>
@@ -311,6 +317,7 @@
             </select>
         </div>
         <p>
+        <div class="settings"><a href="/nets" border="0"><img src="gears.png"/></a></div>
     </div>
 </body>
 </html>
