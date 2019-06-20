@@ -45,16 +45,21 @@ struct StripRec {
     uint8_t hue;
     CLEDController *ctl;
     bool random;
-    byte data[LED_COUNT];
+    byte *data;
 };
+
+byte frontData[LED_COUNT];
+byte backData[LED_COUNT];
 
 Strip front = {
         .name = "front", .on = true, .color = CRGB::Red, .brightness = BRIGHTNESS,
         .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL, .random = false,
+        .data = frontData
 };
 Strip back = {
         .name = "back", .on = true, .color = CRGB::Green, .brightness = BRIGHTNESS,
-        .leds = &backLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL, .random = false
+        .leds = &backLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL, .random = false,
+        .data = backData
 };
 
 

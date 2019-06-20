@@ -21,25 +21,29 @@
             image.src = "colorpicker.png";
 
             function process(d) {
-                $('.switch input').prop('checked', d.front.on);
-                $('#brightness').prop('value', d.front.brightness);
-                $('#effect').prop('value', d.front.effect);
+                let b = $('.led-selector #back').prop('checked');
+                $('.switch input').prop('checked', b ? d.back.on : d.front.on);
+                $('#brightness').prop('value', b ? d.back.brightness : d.front.brightness);
+                $('#effect').prop('value', b ? d.back.effect : d.front.effect);
             }
 
             function send(t, m) {
+                let f = $('.led-selector #front').prop('checked');
+                let b = $('.led-selector #back').prop('checked');
+                let cmd = t === "get" ? "get" : f ? ("/front" + t) : (b ? ("/back" + t) : ("/all" + t));
                 $.ajax({
-                    url: "cmd?t=" + t + "&m=" + m,
-                    turl: "test.json",
+                    url: "/cmd?t=" + cmd + "&m=" + m,
+                    Xurl: "test.json",
                     cache: false,
                     dataType: "json",
                     success: function (d) {
                         process(d);
+                        $('#error').css('#444');
                         $('#error').text('');
-                        console.log('Sent');
                     },
                     error: function (d) {
+                        $('#error').css('#a00');
                         $('#error').text('Disconnected');
-                        console.log('Error', d);
                     },
                     timeout: 3000
                 });
@@ -53,58 +57,71 @@
                 let imageData = ctx.getImageData(canvasX, canvasY, 1, 1);
                 let pixel = imageData.data;
                 let pixelColor = pixel[0] + "," + pixel[1] + "," + pixel[2];
+                if (pixelColor === '0,0,0') {
+                    pixelColor = '255,255,255';
+                }
                 $('.preview').css('backgroundColor', pixelColor);
 
                 console.log('Color: ' + pixelColor);
-                send("/all/rgb", pixelColor);
+                send("/rgb", pixelColor);
             });
 
             $('.switch input').click(function (e) {
                  let on = $('.switch input').prop('checked');
-                 send("/all", on ? "on" : "off");
+                 send("", on ? "on" : "off");
                 console.log(on ? 'Turned on' : 'Turned off');
 
                 let bc = $('#brightness');
                 if (on && bc.prop('value') === '0') {
                     bc.prop('value', '64');
-                    send("/all/brightness", bc.prop('value'));
+                    send("/brightness", bc.prop('value'));
                 }
             });
 
             $('#brightness').change(function (e) {
                 let b = this.value;
-                send("/all/brightness", b);
+                send("/brightness", b);
                 console.log('Brightness: ', b);
             });
 
             $('#effect').change(function (e) {
                 let f = this.value;
-                send("/all/effect", f);
+                send("/effect", f);
                 console.log('Effect: ', f);
             });
 
+            $('.led-selector input').change(function (e) {
+                $('.led-selector label').css('background', '#ccc');
+                $('label[for="' + $(this).attr('id') + '"]').css('background', '#2196F3');
+                send("get", "status");
+            });
+
+            $('label[for="all"]').css('background', '#2196F3');
             send("get", "status");
             setInterval(function () { send("get", "status"); }, 5000);
         });
     </script>
 
     <style>
-        .noshadow * {
-            -webkit-box-shadow: none !important;
-            -moz-box-shadow: none !important;
-            box-shadow: none !important;
-            -webkit-user-select: none !important;
+        body {
+            margin: 0px;
+            background: #444;
+            font-family: Arial, Helvetica, Sans-Serif, serif;
         }
-
         .ui-content {
-            margin-top: 32px;
             text-align: center;
         }
 
         #error {
-            font-family: Arial, Helvetica, Sans-Serif, serif;
-            height: 24px;
-            color: #a00;
+            position: relative;
+            display: inline-block;
+            width: 300px;
+            height: 32px;
+            padding: 8px 8px 0px 8px;
+            background-color: #444;
+            color: #ffffff;
+            font-size: 18px;
+
         }
 
         /* The switch - the box around the slider */
@@ -113,6 +130,7 @@
             display: inline-block;
             width: 60px;
             height: 34px;
+            margin: 16px;
         }
 
         /* Hide default HTML checkbox */
@@ -209,52 +227,72 @@
         .effectcontainer {
             position: relative;
             display: inline-block;
+        }
+
+        .effectcontainer select {
+            -webkit-border-radius: 18px;
+            font-size: 18px;
+            background: #ccc;
+            border: 0px;
             width: 300px;
+            height: 32px;
+            margin: 16px;
         }
 
-
-        .btn-group button {
-            background-color: #ccc; /* Green background */
-            border: 1px solid #2196F3; /* Green border */
-            color: white; /* White text */
-            padding: 10px 24px; /* Some padding */
-            cursor: pointer; /* Pointer/hand icon */
-            float: left; /* Float the buttons side by side */
+        .led-selector {
+            position: relative;
+            display: inline-block;
+            min-width: 300px;
+            width: 300px;
+            height: 32px;
         }
 
-        .btn-group button:not(:last-child) {
-            border-right: none; /* Prevent double borders */
+        .led-selector label:first-of-type {
+            border-radius: 8px 0px 0px 8px;
         }
 
-        /* Clear floats (clearfix hack) */
-        .btn-group:after {
-            content: "";
-            clear: both;
-            display: table;
+        .led-selector label:last-of-type {
+            border-radius: 0px 8px 8px 0px;
         }
 
-        /* Add a background color on hover */
-        .btn-group button:hover {
-            background-color: #2196F3;
+        .led-selector input {
+            display: none;
+        }
+
+        .led-selector label {
+            font-family: Arial, Helvetica, Sans-Serif, serif;
+            display: inline-block;
+            background: #ccc;
+            border: 0px;
+            padding: 10px;
+            min-width: 80px;
         }
     </style>
 </head>
 <body>
-<div data-role="page" class="noshadow">
     <div data-role="main" class="ui-content">
         <p>
         <div id="error"></div>
         <p>
-        <label class="switch">
-            <input type="checkbox">
-            <span class="slider round"></span>
-        </label>
+        <div class="led-selector">
+            <label for="all">All</label><label for="front">Front</label><label for="back">Back</label>
+            <input type="radio" class="stv-radio-button" name="led" value="all" id="all" checked />
+            <input type="radio" class="stv-radio-button" name="led" value="front" id="front" />
+            <input type="radio" class="stv-radio-button" name="led" value="back" id="back" />
+        </div>
         <p>
-        <!--div class="btn-group">
-            <button type="button" class="btn btn-primary">All</button>
-            <button type="button" class="btn btn-primary">Front</button>
-            <button type="button" class="btn btn-primary">Back</button>
-        </div-->
+        <div>
+            <label class="switch">
+                <input type="checkbox">
+                <span class="slider round"></span>
+            </label>
+        </div>
+        <p>
+        <canvas id="picker" var="1" width="290" height="290"></canvas>
+        <p>
+        <div class="brightnesscontainer">
+            <input type="range" min="0" max="255" value="0" class="brightness" id="brightness">
+        </div>
         <p>
         <div class="effectcontainer">
             <select id="effect">
@@ -273,13 +311,7 @@
             </select>
         </div>
         <p>
-        <canvas id="picker" var="1" width="290" height="290"></canvas>
-        <p>
-        <div class="brightnesscontainer">
-            <input type="range" min="0" max="255" value="0" class="brightness" id="brightness">
-        </div>
     </div>
-</div>
 </body>
 </html>
 

@@ -7,8 +7,8 @@
   },
   "back": {
     "rgb": "255,255,0",
-    "on": true,
-    "brightness": 128,
-    "effect": "fire"
+    "on": false,
+    "brightness": 64,
+    "effect": "glitter"
   }
 }
