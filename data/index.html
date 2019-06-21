@@ -43,7 +43,7 @@
                     error: function (d) {
                         $('#error').html('Disconnected');
                     },
-                    timeout: 3000
+                    timeout: 1000
                 });
             }
 
@@ -96,7 +96,7 @@
 
             $('label[for="all"]').css('background', '#2196F3');
             send("get", "status");
-            setInterval(function () { send("get", "status"); }, 5000);
+            setInterval(function () { send("get", "status"); }, 15000);
         });
     </script>
 
