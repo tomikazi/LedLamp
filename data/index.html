@@ -25,6 +25,7 @@
                 $('.switch input').prop('checked', b ? d.back.on : d.front.on);
                 $('#brightness').prop('value', b ? d.back.brightness : d.front.brightness);
                 $('#effect').prop('value', b ? d.back.effect : d.front.effect);
+                $('#version').html(d.version);
             }
 
             function send(t, m) {
@@ -271,8 +272,13 @@
         }
 
 
-        .settings {
-            margin: 64px;
+        #settings {
+            margin: 64px 16px 16px 16px;
+        }
+
+        #version {
+            font-style: italic;
+            color: #aaa;
         }
     </style>
 </head>
@@ -322,7 +328,8 @@
             </select>
         </div>
         <p>
-        <div class="settings"><a href="/nets" border="0"><img src="gears.png"/></a></div>
+        <div id="settings"><a href="/nets" border="0"><img src="gears.png"/></a></div>
+        <div id="version">2019.05.15.001</div>
     </div>
 </body>
 </html>

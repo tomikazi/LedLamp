@@ -240,6 +240,7 @@ void handleCommand() {
     gizmo.httpServer()->sendContent(stripStatus(&front));
     gizmo.httpServer()->sendContent(",");
     gizmo.httpServer()->sendContent(stripStatus(&back));
+    gizmo.httpServer()->sendContent(",\"version\":\"" SW_VERSION "\"");
     gizmo.httpServer()->sendContent("}");
 }
 
