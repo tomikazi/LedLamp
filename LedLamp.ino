@@ -343,6 +343,119 @@ void fire(Strip *s) {
 }
 
 
+CRGBPalette16 currentPalette(CRGB::Black);
+CRGBPalette16 targetPalette(OceanColors_p);
+
+void noise(Strip *s) {
+    EVERY_N_MILLIS(10) {
+        // Blend towards the target palette over 48 iterations
+        nblendPaletteTowardPalette(currentPalette, targetPalette, 48);
+        fillnoise8(s);
+    }
+
+    // Change the target palette to a random one every 5 seconds.
+    EVERY_N_SECONDS(5) {
+        targetPalette = CRGBPalette16(CHSV(random8(), 255, random8(128,255)),
+                CHSV(random8(), 255, random8(128,255)),
+                CHSV(random8(), 192, random8(128,255)),
+                CHSV(random8(), 255, random8(128,255)));
+    }
+} // loop()
+
+#define SCALE 30
+
+void fillnoise8(Strip *s) {
+    // A random number for our noise generator.
+    static uint16_t dist;
+
+    // Just ONE loop to fill up the LED array as all of the pixels change.
+    for(int i = 0; i < LED_COUNT; i++) {
+        // Get a value from the noise function. I'm using both x and y axis.
+        uint8_t index = inoise8(i*SCALE, dist+i*SCALE);
+        // With that value, look up the 8 bit colour palette value and assign it to the current LED.
+        s->leds[i] = ColorFromPalette(currentPalette, index, 255, LINEARBLEND);
+    }
+    // Moving along the distance (that random number we started out with). Vary it a bit with a sine wave.
+    dist += beatsin8(10,1, 4);
+}
+
+void blendwave(Strip *s) {
+    uint8_t speed = beatsin8(6,0,255);
+
+    CRGB clr1 = blend(CHSV(beatsin8(3,0,255),255,255), CHSV(beatsin8(4,0,255),255,255), speed);
+    CRGB clr2 = blend(CHSV(beatsin8(4,0,255),255,255), CHSV(beatsin8(3,0,255),255,255), speed);
+
+    uint8_t loc1 = beatsin8(10,0,LED_COUNT-1);
+
+    fill_gradient_RGB(s->leds, 0, clr2, loc1, clr1);
+    fill_gradient_RGB(s->leds, loc1, clr2, LED_COUNT-1, clr1);
+}
+
+void dotBeat(Strip *s) {
+    uint8_t bpm = 30;
+    uint8_t fadeval = 224;                                        // Trail behind the LED's. Lower => faster fade.
+
+    uint8_t inner = beatsin8(bpm, LED_COUNT / 4, LED_COUNT / 4 * 3);    // Move 1/4 to 3/4
+    uint8_t outer = beatsin8(bpm, 0, LED_COUNT - 1);               // Move entire length
+    uint8_t middle = beatsin8(bpm, LED_COUNT / 3, LED_COUNT / 3 * 2);   // Move 1/3 to 2/3
+
+    s->leds[middle] = CRGB::Purple;
+    s->leds[inner] = CRGB::Blue;
+    s->leds[outer] = CRGB::Aqua;
+
+    // Fade the entire array. Or for just a few LED's, use  nscale8(&leds[2], 5, fadeval);
+    nscale8(s->leds, LED_COUNT, fadeval);
+}
+
+
+
+void plasma(Strip *s) {
+    EVERY_N_MILLISECONDS(50) {
+        doPlasma(s);
+    }
+
+    EVERY_N_MILLISECONDS(100) {
+        uint8_t maxChanges = 24;
+        nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);   // AWESOME palette blending capability.
+    }
+
+    // Change the target palette to a random one every 5 seconds.
+    EVERY_N_SECONDS(5) {
+        // You can use this as a baseline colour if you want similar hues in the next line.
+        uint8_t baseC = random8();
+        targetPalette = CRGBPalette16(CHSV(baseC+random8(32), 192, random8(128,255)),
+                CHSV(baseC+random8(32), 255, random8(128,255)),
+                CHSV(baseC+random8(32), 192, random8(128,255)),
+                CHSV(baseC+random8(32), 255, random8(128,255)));
+    }
+}
+
+// Use qsuba for smooth pixel colouring and qsubd for non-smooth pixel colouring
+#define qsubd(x, b)  ((x>b)?b:0)                              // Digital unsigned subtraction macro. if result <0, then => 0. Otherwise, take on fixed value.
+#define qsuba(x, b)  ((x>b)?x-b:0)                            // Analog Unsigned subtraction macro. if result <0, then => 0
+
+void doPlasma(Strip *s) {
+    // Setting phase change for a couple of waves.
+    int thisPhase = beatsin8(6, -64, 64);
+    int thatPhase = beatsin8(7, -64, 64);
+
+    // For each of the LED's in the strand, set a brightness based on a wave as follows:
+    for (int k = 0; k < LED_COUNT; k++) {
+        // Create a wave and add a phase change and add another wave with its own phase change.. Hey, you can even change the frequencies if you wish.
+        int colorIndex = cubicwave8((k * 23) + thisPhase) / 2 + cos8((k * 15) + thatPhase) / 2;
+        // qsub gives it a bit of 'black' dead space by setting sets a minimum value. If colorIndex < current value of beatsin8(), then bright = 0. Otherwise, bright = colorIndex..
+        int thisBright = qsuba(colorIndex, beatsin8(7, 0, 96));
+
+        // Let's now add the foreground colour.
+        s->leds[k] = ColorFromPalette(currentPalette, colorIndex, thisBright, LINEARBLEND);
+    }
+}
+
+
+
+
+
+
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
         Pattern{.name = "glitter", .renderer = glitter, .pause = 20, .next = NULL },
@@ -354,6 +467,10 @@ Pattern patterns[] = {
         Pattern{.name = "juggle", .renderer = juggle, .pause = 20, .next = NULL },
         Pattern{.name = "bpm", .renderer = bpm, .pause = 20, .next = NULL },
         Pattern{.name = "fire", .renderer = fire, .pause = 20, .next = NULL },
+        Pattern{.name = "noise", .renderer = noise, .pause = 20, .next = NULL },
+        Pattern{.name = "blendwave", .renderer = blendwave, .pause = 20, .next = NULL },
+        Pattern{.name = "dotbeat", .renderer = dotBeat, .pause = 20, .next = NULL },
+        Pattern{.name = "plasma", .renderer = plasma, .pause = 20, .next = NULL },
 
         Pattern{.name = "test", .renderer = test, .pause = 20, .next = NULL }
 };
