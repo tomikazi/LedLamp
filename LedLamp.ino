@@ -3,9 +3,11 @@
 
 #include <FastLED.h>
 
+#include <WebSocketsServer.h>
+
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2019.06.21.001"
+#define SW_VERSION      "2019.06.29.001"
 
 #define LED_DATA   "cfg/led"
 
@@ -61,6 +63,7 @@ Strip back = {
         .data = backData
 };
 
+static WebSocketsServer wsServer(81);
 
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "");
@@ -86,6 +89,8 @@ void setup() {
     gizmo.httpServer()->on("/cmd", handleCommand);
     gizmo.httpServer()->serveStatic("/", SPIFFS, "/", "max-age=86400");
 
+    setupWebSocket();
+
     setupLED();
     gizmo.endSetup();
 }
@@ -100,6 +105,12 @@ void setupLED() {
     fadeToBlackBy(backLeds, LED_COUNT, 255);
     back.ctl->showLeds(back.brightness);
     back.pattern = findPattern("glitter");
+}
+
+void setupWebSocket() {
+    wsServer.begin();
+    wsServer.onEvent(webSocketEvent);
+    Serial.println("WebSocket server setup.");
 }
 
 // Command processors
@@ -174,6 +185,44 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     }
 }
 
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+    switch (type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[%u] Disconnected.\n", num);
+            break;
+        case WStype_CONNECTED:
+            Serial.printf("[%u] Connected.\n", num);
+            break;
+        case WStype_TEXT:
+            char cmd[128];
+            cmd[0] = '\0';
+            strncat(cmd, (char *) payload, length);
+            handleWsCommand(cmd);
+            break;
+
+        default:
+            Serial.printf("Unhandled message type\n");
+            break;
+    }
+}
+
+void handleWsCommand(char *cmd) {
+    char *t = strtok(cmd, "&");
+    char *m = strtok(NULL, "&");
+
+    if (strcmp(t, "get")) {
+        mqttCallback(t, (uint8_t *) m, strlen(m));
+    }
+    broadcastState();
+}
+
+void broadcastState() {
+    char state[512], f[128], b[128];
+    state[0] = '\0';
+    snprintf(state, 511, "{%s,%s,\"version\":\"" SW_VERSION "\"}", stripStatus(f, &front), stripStatus(b, &back));
+    wsServer.broadcastTXT(state);
+}
+
 void handleLEDs(Strip *strip) {
     if (strip->on && strip->pattern) {
         strip->pattern->renderer(strip);
@@ -206,7 +255,9 @@ void finishWiFiConnect() {
 }
 
 void loop() {
-    gizmo.isNetworkAvailable(finishWiFiConnect);
+    if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
+        wsServer.loop();
+    }
     handleLEDs(&front);
     handleLEDs(&back);
 }
@@ -219,8 +270,7 @@ void handleRoot() {
 
 #define STRIP_STATUS "\"%s\": {\"on\": %s,\"rgb\": \"%d,%d,%d\",\"brightness\": %d,\"effect\": \"%s\"}"
 
-char *stripStatus(Strip *s) {
-    static char html[128];
+char *stripStatus(char *html, Strip *s) {
     snprintf(html, 127, STRIP_STATUS, s->name, s->on ? "true" : "false",
              s->color.red, s->color.green, s->color.blue, s->brightness,
              s->pattern ? s->pattern->name : "none");
@@ -235,11 +285,14 @@ void handleCommand() {
         mqttCallback(t, (uint8_t *) m, strlen(m));
     }
 
+    static char f[128];
+    static char b[128];
+
     gizmo.httpServer()->setContentLength(CONTENT_LENGTH_UNKNOWN);
     gizmo.httpServer()->send(200, "application/json", "{");
-    gizmo.httpServer()->sendContent(stripStatus(&front));
+    gizmo.httpServer()->sendContent(stripStatus(f, &front));
     gizmo.httpServer()->sendContent(",");
-    gizmo.httpServer()->sendContent(stripStatus(&back));
+    gizmo.httpServer()->sendContent(stripStatus(b, &back));
     gizmo.httpServer()->sendContent(",\"version\":\"" SW_VERSION "\"");
     gizmo.httpServer()->sendContent("}");
 }

@@ -13,6 +13,7 @@
         $(document).ready(function () {
             let canvas = document.getElementById('picker');
             let ctx = canvas.getContext('2d');
+            let ws, lastHeard;
 
             let image = new Image();
             image.onload = function () {
@@ -29,23 +30,61 @@
             }
 
             function send(t, m) {
-                let f = $('.led-selector #front').prop('checked');
-                let b = $('.led-selector #back').prop('checked');
-                let cmd = t === "get" ? "get" : f ? ("/front" + t) : (b ? ("/back" + t) : ("/all" + t));
-                $.ajax({
-                    url: "/cmd?t=" + cmd + "&m=" + m,
-                    Xurl: "test.json",
-                    cache: false,
-                    dataType: "json",
-                    success: function (d) {
+                if (ws && ws.readyState === 1) {
+                    let f = $('.led-selector #front').prop('checked');
+                    let b = $('.led-selector #back').prop('checked');
+                    let cmd = t === "get" ? "get" : f ? ("/front" + t) : (b ? ("/back" + t) : ("/all" + t));
+                    ws.send(cmd + "&" + m);
+                }
+            }
+
+            function markLive(on) {
+                $('#error').html(on ? '' : 'Disconnected');
+            }
+
+            function startWebSocket() {
+                lastHeard = new Date().getTime();
+                let port = location.port ? (parseInt(location.port) + 1) : 81;
+                ws = new WebSocket('ws://' + location.hostname + ':' + port + '/', ['arduino']);
+                console.log('Starting WebSocket', ws);
+
+                ws.onopen = function () {
+                    console.log('WebSocket connected');
+                    markLive(true);
+                    send("get", "status");
+                };
+
+                ws.onerror = function (error) {
+                    connectionLost('WebSocket error ' + error);
+                };
+
+                ws.onmessage = function (e) {
+                    markLive(true);
+                    lastHeard = new Date().getTime();
+                    let d = JSON.parse(e.data);
+                    console.log('Got message', d);
+                    if (d.version) {
                         process(d);
-                        $('#error').html('');
-                    },
-                    error: function (d) {
-                        $('#error').html('Disconnected');
-                    },
-                    timeout: 1000
-                });
+                    }
+                };
+            }
+
+            function checkWebSocket() {
+                if (lastHeard < new Date().getTime() - 5000) {
+                    if (ws && ws.readyState !== 0) {
+                        connectionLost('WebSocket went stale...');
+                        markLive(false);
+                        ws.close();
+                        startWebSocket();
+                    }
+                } else if (ws && ws.readyState === 1) {
+                    send("get", "status");
+                }
+            }
+
+            function connectionLost(m) {
+                console.log(m || 'Connection error');
+                markLive(false);
             }
 
             $('#picker').click(function (e) {
@@ -96,8 +135,9 @@
             });
 
             $('label[for="all"]').css('background', '#2196F3');
-            send("get", "status");
-            setInterval(function () { send("get", "status"); }, 15000);
+
+            startWebSocket();
+            setInterval(checkWebSocket, 3000);
         });
     </script>
 
