@@ -7,9 +7,9 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2019.06.29.001"
+#define SW_VERSION      "2019.06.29.002"
 
-#define LED_DATA   "cfg/led"
+#define STATE      "state"
 
 #define FRONT_PIN       4
 #define BACK_PIN        5
@@ -162,6 +162,7 @@ void processCallback(char *topic, char *value, Strip *strip) {
     } else {
         processOnOff(value, strip);
     }
+    saveState();
 }
 
 
@@ -250,8 +251,7 @@ void handleLEDs(Strip *strip) {
 
 void finishWiFiConnect() {
     Serial.printf("%s is ready\n", LED_LIGHTS);
-    front.pattern = findPattern("confetti");
-    back.pattern = findPattern("confetti");
+    loadState();
 }
 
 void loop() {
@@ -295,6 +295,48 @@ void handleCommand() {
     gizmo.httpServer()->sendContent(stripStatus(b, &back));
     gizmo.httpServer()->sendContent(",\"version\":\"" SW_VERSION "\"");
     gizmo.httpServer()->sendContent("}");
+}
+
+
+void loadState() {
+    File f = SPIFFS.open(STATE, "r");
+    if (f) {
+        loadStripState(f, &front);
+        loadStripState(f, &back);
+        f.close();
+    }
+}
+
+void loadStripState(File f, Strip *s) {
+    char field[32];
+    int l = f.readBytesUntil('|', field, 32);
+    field[l] = '\0';
+    s->on = !strcmp(field, "on");
+
+    l = f.readBytesUntil('|', field, 32);
+    field[l] = '\0';
+    processColor(field, s);
+
+    l = f.readBytesUntil('|', field, 7);
+    field[l] = '\0';
+    s->brightness = atoi(field);
+
+    l = f.readBytesUntil('\n', field, 32);
+    field[l] = '\0';
+    s->pattern = !strcmp(field, "none") ? NULL : findPattern(field);
+}
+
+void saveState() {
+    File f = SPIFFS.open(STATE, "w");
+    if (f) {
+        f.printf("%s|%d,%d,%d|%d|%s\n", front.on ? "on" : "off",
+                 front.color.red, front.color.green, front.color.blue, front.brightness,
+                 front.pattern ? front.pattern->name : "none");
+        f.printf("%s|%d,%d,%d|%d|%s\n", back.on ? "on" : "off",
+                 back.color.red, back.color.green, back.color.blue, back.brightness,
+                 back.pattern ? back.pattern->name : "none");
+        f.close();
+    }
 }
 
 // LED Patterns
