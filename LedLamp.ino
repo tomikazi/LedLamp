@@ -7,7 +7,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2019.06.29.002"
+#define SW_VERSION      "2019.06.30.001"
 
 #define STATE      "state"
 
@@ -66,7 +66,7 @@ Strip back = {
 static WebSocketsServer wsServer(81);
 
 void setup() {
-    gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "");
+    gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL);
 
     gizmo.setCallback(mqttCallback);
