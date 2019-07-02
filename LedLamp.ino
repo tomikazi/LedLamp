@@ -1,4 +1,5 @@
 #include <ESPGizmoDefault.h>
+#include <WiFiUDP.h>
 #include <FS.h>
 
 #include <FastLED.h>
@@ -7,18 +8,20 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2019.06.30.001"
+#define SW_VERSION      "2019.07.02.001"
 
 #define STATE      "state"
 
 #define FRONT_PIN       4
 #define BACK_PIN        5
 
-#define LED_COUNT               60
+#define LED_COUNT               34
 #define LED_TYPE                WS2812B
 #define COLOR_ORDER             GRB
 #define BRIGHTNESS              96
 #define FRAMES_PER_SECOND       60
+
+WiFiUDP UDP;
 
 CRGB frontLeds[LED_COUNT];
 CRGB backLeds[LED_COUNT];
@@ -65,6 +68,19 @@ Strip back = {
 
 static WebSocketsServer wsServer(81);
 
+#define MAX_SAMPLES     8
+typedef struct {
+    uint16_t count;
+    uint16_t data[MAX_SAMPLES];
+} Sample;
+
+// For moving average for the N most recent samples
+#define N   256
+uint32_t mat = 200 * N; // initial value
+
+Sample sample;
+
+
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL);
@@ -90,6 +106,7 @@ void setup() {
     gizmo.httpServer()->serveStatic("/", SPIFFS, "/", "max-age=86400");
 
     setupWebSocket();
+    UDP.begin(7001);
 
     setupLED();
     gizmo.endSetup();
@@ -254,9 +271,21 @@ void finishWiFiConnect() {
     loadState();
 }
 
+void handleMicData() {
+    if (UDP.parsePacket()) {
+        UDP.read((char *) &sample, sizeof(sample));
+        for (int i = 0; i < sample.count; i++) {
+            mat = mat + sample.data[i] - (mat >> 8);
+            uint16_t av = abs(sample.data[i] - (mat >> 8));
+            Serial.printf("200, 300, %d, %d, %d\n", sample.data[i], av + 250, mat >> 8);
+        }
+    }
+}
+
 void loop() {
     if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
         wsServer.loop();
+        handleMicData();
     }
     handleLEDs(&front);
     handleLEDs(&back);
