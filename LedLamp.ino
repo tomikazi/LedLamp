@@ -81,9 +81,9 @@ typedef struct {
     uint16_t data[MAX_SAMPLES];
 } Sample;
 
-// For moving average for the N most recent samples
-#define N   256
-uint32_t mat = 200 * N; // initial value
+// For moving average for the N most recent (already normalized) samples
+#define N   64
+uint32_t mat = 0;
 
 Sample sample;
 
@@ -282,9 +282,8 @@ void handleMicData() {
     if (UDP.parsePacket()) {
         UDP.read((char *) &sample, sizeof(sample));
         for (int i = 0; i < sample.count; i++) {
-            mat = mat + sample.data[i] - (mat >> 8);
-            uint16_t av = abs(sample.data[i] - (mat >> 8));
-            Serial.printf("500, 800, %d, %d, %d\n", sample.data[i], av + 600, mat >> 8);
+            mat = mat + sample.data[i] - (mat >> 6);
+            Serial.printf("100, %d, %d\n", sample.data[i], mat >> 6);
         }
     }
 }
