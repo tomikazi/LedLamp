@@ -15,7 +15,9 @@
 #define FRONT_PIN       4
 #define BACK_PIN        5
 
-#define LED_COUNT               60
+#define MIC_PIN         A0
+
+#define LED_COUNT               34
 #define LED_TYPE                WS2812B
 #define COLOR_ORDER             GRB
 #define BRIGHTNESS              96
@@ -35,8 +37,8 @@ typedef void (*Renderer)(Strip *);
 typedef struct Pattern {
     const char *name;
     Renderer renderer;
-    uint32_t pause;
-    Pattern *next;
+    uint32_t huePause;
+    uint32_t renderPause;
 } Pattern;
 
 struct StripRec {
@@ -81,9 +83,14 @@ typedef struct {
     uint16_t data[MAX_SAMPLES];
 } Sample;
 
-// For moving average for the N most recent (already normalized) samples
-#define N   64
+// For moving averages
 uint32_t mat = 0;
+uint32_t nmat = 0;
+
+// Sample average, max and peak detection
+uint16_t sampleavg = 0;
+uint16_t oldsample = 0;
+uint16_t samplepeak = 0;
 
 Sample sample;
 
@@ -250,18 +257,35 @@ void broadcastState() {
 
 void handleLEDs(Strip *strip) {
     if (strip->on && strip->pattern) {
-        strip->pattern->renderer(strip);
-        strip->ctl->showLeds(strip->brightness);
-
-        // Sets initial timing only. Changes here don't do anything
-        EVERY_N_MILLIS_I(ticktimer, 20)
-        {
-            strip->hue++; // slowly cycle the "base color" through the rainbow
-            ticktimer.setPeriod(strip->pattern->pause);
+        EVERY_N_MILLISECONDS(20) {
+            uint8_t maxChanges = 24;
+            nblendPaletteTowardPalette(strip->currentPalette, strip->targetPalette, maxChanges);
         }
 
-        EVERY_N_SECONDS(60)
-        {
+        // Sets initial timing only. Changes here don't do anything
+        EVERY_N_MILLIS_I(hueTimer, 20) {
+            strip->hue++; // slowly cycle the "base color" through the rainbow
+            hueTimer.setPeriod(strip->pattern->huePause);
+        }
+
+        EVERY_N_MILLIS_I(renderTimer, 20) {
+            renderTimer.setPeriod(strip->pattern->renderPause);
+            strip->pattern->renderer(strip);
+            strip->ctl->showLeds(strip->brightness);
+        }
+
+        // Change the target palette to a 'related colours' palette every 5 seconds.
+        EVERY_N_SECONDS(5) {
+            // This is the base colour. Other colours are within 16 hues of this. One color is 128 + baseclr.
+            uint8_t baseclr = random8();
+            strip->targetPalette = CRGBPalette16(
+                    CHSV(baseclr + random8(64), 255, random8(128,255)),
+                    CHSV(baseclr + random8(64), 255, random8(128,255)),
+                    CHSV(baseclr + random8(64), 192, random8(128,255)),
+                    CHSV(baseclr + random8(64), 255, random8(128,255)));
+        }
+
+        EVERY_N_SECONDS(60) {
             if (strip->random) {
                 strip->pattern = randomPattern();
             }
@@ -276,15 +300,53 @@ void handleLEDs(Strip *strip) {
 void finishWiFiConnect() {
     Serial.printf("%s is ready\n", LED_LIGHTS);
     loadState();
+//    front.pattern = findPattern("noisepal");
+}
+
+void handleRemoteMicData() {
+    if (UDP.parsePacket()) {
+        UDP.read((char *) &sample, sizeof(sample));
+        samplepeak = 0;
+        for (int i = 0; i < sample.count; i++) {
+            uint16_t v = constrain(sample.data[i], 0, 64);
+            v = map(v, 0, 64, 0, 255);
+
+            mat = mat + v - (mat >> 4);
+            sampleavg = mat >> 4;
+
+            if (!samplepeak && v > 200)
+                samplepeak = 1;
+
+            Serial.printf("-50, 100, %d, %d, %d\n", v, sampleavg, samplepeak * -20);
+
+            if (v > oldsample)
+                oldsample = v;
+        }
+    }
 }
 
 void handleMicData() {
-    if (UDP.parsePacket()) {
-        UDP.read((char *) &sample, sizeof(sample));
-        for (int i = 0; i < sample.count; i++) {
-            mat = mat + sample.data[i] - (mat >> 6);
-            Serial.printf("100, %d, %d\n", sample.data[i], mat >> 6);
+    EVERY_N_MILLISECONDS(5) {
+        uint16_t v = analogRead(MIC_PIN);
+
+        mat = mat + v - (mat >> 8);
+        uint16_t av = abs(v - (mat >> 8));
+
+        if (av < 4) {
+            av = 0;
+        } else if (av > 128) {
+            av = 128;
         }
+
+        av = map(av, 0, 128, 0, 255);
+        nmat = nmat + av - (nmat >> 4);
+        sampleavg = nmat >> 4;
+
+        // We're on the down swing, so we just peaked.
+        samplepeak = av > (sampleavg + 16) && (av < oldsample);
+
+        Serial.printf("255, %d, %d, %d\n", av, sampleavg, samplepeak * 200);
+        oldsample = av;
     }
 }
 
@@ -380,24 +442,39 @@ void saveState() {
 #include "plasma.h"
 #include "blendwave.h"
 #include "dotBeat.h"
+#include "pixels.h"
+#include "ripple.h"
+#include "matrix.h"
+#include "pixel.h"
+#include "onesine.h"
+#include "noisefire.h"
+#include "rainbowg.h"
+#include "noisepal.h"
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
-        Pattern{.name = "glitter", .renderer = glitter, .pause = 20, .next = NULL },
-        Pattern{.name = "confetti", .renderer = confetti, .pause = 20, .next = NULL },
-        Pattern{.name = "cycle", .renderer = cycle, .pause = 200, .next = NULL },
-        Pattern{.name = "rainbow", .renderer = rainbow, .pause = 20, .next = NULL },
-        Pattern{.name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .pause = 20, .next = NULL },
-        Pattern{.name = "sinelon", .renderer = sinelon, .pause = 20, .next = NULL },
-        Pattern{.name = "juggle", .renderer = juggle, .pause = 20, .next = NULL },
-        Pattern{.name = "bpm", .renderer = bpm, .pause = 20, .next = NULL },
-        Pattern{.name = "fire", .renderer = fire, .pause = 20, .next = NULL },
-        Pattern{.name = "noise", .renderer = noise, .pause = 20, .next = NULL },
-        Pattern{.name = "blendwave", .renderer = blendwave, .pause = 20, .next = NULL },
-        Pattern{.name = "dotbeat", .renderer = dotBeat, .pause = 20, .next = NULL },
-        Pattern{.name = "plasma", .renderer = plasma, .pause = 20, .next = NULL },
-
-        Pattern{.name = "test", .renderer = test, .pause = 20, .next = NULL }
+        Pattern{.name = "glitter", .renderer = glitter, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "confetti", .renderer = confetti, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20 },
+        Pattern{.name = "rainbow", .renderer = rainbow, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20 },
+        Pattern{.name = "pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0 },
+        Pattern{.name = "pixels", .renderer = pixels, .huePause = 2000, .renderPause = 50 },
+        Pattern{.name = "ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20 },
+        Pattern{.name = "matrix", .renderer = matrix, .huePause = 2000, .renderPause = 40 },
+        Pattern{.name = "onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30 },
+        Pattern{.name = "noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0 },
+        Pattern{.name = "noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0 },
+        Pattern{.name = "rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10 },
+        Pattern{.name = "test", .renderer = test, .huePause = 20, .renderPause = 20 }
 };
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
