@@ -25,6 +25,34 @@ void addGlitter(Strip *s, fract8 chanceOfGlitter) {
     }
 }
 
+// Send the pixels one or the other direction down the line.
+void lineit(Strip *s, int thisdir) {
+    if (thisdir == 0) {
+        for (int i = LED_COUNT - 1; i > 0; i--) {
+            s->leds[i] = s->leds[i - 1];
+        }
+    } else {
+        for (int i = 0; i < LED_COUNT - 1; i++) {
+            s->leds[i] = s->leds[i + 1];
+        }
+    }
+}
+
+
+// Shifting pixels from the center to the left and right.
+void waveit(Strip *s) {
+    // Move to the right.
+    for (int i = LED_COUNT - 1; i > LED_COUNT / 2; i--) {
+        s->leds[i] = s->leds[i - 1];
+    }
+
+    // Move to the left.
+    for (int i = 0; i < LED_COUNT / 2; i++) {
+        s->leds[i] = s->leds[i + 1];
+    }
+}
+
+
 void cycle(Strip *s) {
     fill_solid(s->leds, LED_COUNT, CHSV(s->hue, 200, 255));
 }

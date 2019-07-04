@@ -39,6 +39,7 @@ typedef struct Pattern {
     Renderer renderer;
     uint32_t huePause;
     uint32_t renderPause;
+    boolean  soundReactive;
 } Pattern;
 
 struct StripRec {
@@ -54,6 +55,7 @@ struct StripRec {
     CRGBPalette16 targetPalette;
     TBlendType currentBlending;
     bool random;
+    bool soundReactive;
     byte *data;
 };
 
@@ -64,15 +66,13 @@ Strip front = {
         .name = "front", .on = true, .color = CRGB::Red, .brightness = BRIGHTNESS,
         .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
-        .currentBlending = LINEARBLEND,
-        .random = false, .data = frontData
+        .currentBlending = LINEARBLEND, .random = false, .soundReactive = false, .data = frontData
 };
 Strip back = {
         .name = "back", .on = true, .color = CRGB::Green, .brightness = BRIGHTNESS,
         .leds = &backLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
-        .currentBlending = LINEARBLEND,
-        .random = false, .data = backData
+        .currentBlending = LINEARBLEND, .random = false, .soundReactive = false, .data = backData
 };
 
 static WebSocketsServer wsServer(81);
@@ -175,9 +175,10 @@ void processBrightness(char *value, Strip *strip) {
 
 void processEffect(char *value, Strip *strip) {
     strip->on = true;
-    strip->random = !strcmp(value, "random");
+    strip->soundReactive = !strcmp(value, "soundReactive");
+    strip->random = !strcmp(value, "random") || strip->soundReactive;
     if (strip->random) {
-        strip->pattern = randomPattern();
+        strip->pattern = strip->soundReactive ? randomSoundReactivePattern() : randomPattern();
     } else {
         strip->pattern = findPattern(value);
     }
@@ -285,9 +286,9 @@ void handleLEDs(Strip *strip) {
                     CHSV(baseclr + random8(64), 255, random8(128,255)));
         }
 
-        EVERY_N_SECONDS(60) {
+        EVERY_N_SECONDS(30) {
             if (strip->random) {
-                strip->pattern = randomPattern();
+                strip->pattern = strip->soundReactive ? randomSoundReactivePattern() : randomPattern();
             }
         }
 
@@ -300,7 +301,6 @@ void handleLEDs(Strip *strip) {
 void finishWiFiConnect() {
     Serial.printf("%s is ready\n", LED_LIGHTS);
     loadState();
-//    front.pattern = findPattern("noisepal");
 }
 
 void handleRemoteMicData() {
@@ -450,31 +450,39 @@ void saveState() {
 #include "noisefire.h"
 #include "rainbowg.h"
 #include "noisepal.h"
+#include "besin.h"
+#include "fillnoise.h"
+#include "plasmasr.h"
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
-        Pattern{.name = "glitter", .renderer = glitter, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "confetti", .renderer = confetti, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20 },
-        Pattern{.name = "rainbow", .renderer = rainbow, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20 },
-        Pattern{.name = "pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0 },
-        Pattern{.name = "pixels", .renderer = pixels, .huePause = 2000, .renderPause = 50 },
-        Pattern{.name = "ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20 },
-        Pattern{.name = "matrix", .renderer = matrix, .huePause = 2000, .renderPause = 40 },
-        Pattern{.name = "onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30 },
-        Pattern{.name = "noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0 },
-        Pattern{.name = "noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0 },
-        Pattern{.name = "rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10 },
-        Pattern{.name = "test", .renderer = test, .huePause = 20, .renderPause = 20 }
+        Pattern{.name = "glitter", .renderer = glitter, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "confetti", .renderer = confetti, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "rainbow", .renderer = rainbow, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false },
+
+        Pattern{.name = "pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true },
+        Pattern{.name = "pixels", .renderer = pixels, .huePause = 2000, .renderPause = 50, .soundReactive = true },
+        Pattern{.name = "ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20, .soundReactive = true },
+        Pattern{.name = "matrix", .renderer = matrix, .huePause = 2000, .renderPause = 40, .soundReactive = true },
+        Pattern{.name = "onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30, .soundReactive = true },
+        Pattern{.name = "noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0, .soundReactive = true },
+        Pattern{.name = "noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0, .soundReactive = true },
+        Pattern{.name = "rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10, .soundReactive = true },
+        Pattern{.name = "besin", .renderer = besin, .huePause = 2000, .renderPause = 20, .soundReactive = true },
+        Pattern{.name = "fillnoise", .renderer = fillnoise, .huePause = 2000, .renderPause = 40, .soundReactive = true },
+        Pattern{.name = "plasmasr", .renderer = plasmasr, .huePause = 2000, .renderPause = 20, .soundReactive = true },
+
+        Pattern{.name = "test", .renderer = test, .huePause = 20, .renderPause = 20, .soundReactive = false }
 };
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
@@ -489,4 +497,13 @@ Pattern *findPattern(const char *name) {
 
 Pattern *randomPattern() {
     return &patterns[random8(ARRAY_SIZE(patterns) - 1)];
+}
+
+Pattern *randomSoundReactivePattern() {
+    Pattern *p;
+    do {
+        p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
+    } while (!p->soundReactive);
+
+    return p;
 }
