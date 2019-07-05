@@ -42,6 +42,13 @@ typedef struct Pattern {
     boolean  soundReactive;
 } Pattern;
 
+typedef enum {
+    NOT_RANDOM,
+    ALL,
+    SOUND_REACTIVE,
+    NOT_SOUND_REACTIVE
+} RandomMode;
+
 struct StripRec {
     const char *name;
     bool on;
@@ -54,8 +61,7 @@ struct StripRec {
     CRGBPalette16 currentPalette;
     CRGBPalette16 targetPalette;
     TBlendType currentBlending;
-    bool random;
-    bool soundReactive;
+    RandomMode randomMode;
     byte *data;
 };
 
@@ -66,13 +72,13 @@ Strip front = {
         .name = "front", .on = true, .color = CRGB::Red, .brightness = BRIGHTNESS,
         .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
-        .currentBlending = LINEARBLEND, .random = false, .soundReactive = false, .data = frontData
+        .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM, .data = frontData
 };
 Strip back = {
         .name = "back", .on = true, .color = CRGB::Green, .brightness = BRIGHTNESS,
         .leds = &backLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
-        .currentBlending = LINEARBLEND, .random = false, .soundReactive = false, .data = backData
+        .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM, .data = backData
 };
 
 static WebSocketsServer wsServer(81);
@@ -173,14 +179,19 @@ void processBrightness(char *value, Strip *strip) {
     strip->on = strip->brightness != 0;
 }
 
+RandomMode randomMode(const char *name) {
+    return !strcmp(name, "random") ? ALL :
+                !strcmp(name, "soundReactive") ? SOUND_REACTIVE :
+                    !strcmp(name, "notSoundReactive") ? NOT_SOUND_REACTIVE : NOT_RANDOM;
+}
+
 void processEffect(char *value, Strip *strip) {
     strip->on = true;
-    strip->soundReactive = !strcmp(value, "soundReactive");
-    strip->random = !strcmp(value, "random") || strip->soundReactive;
-    if (strip->random) {
-        strip->pattern = strip->soundReactive ? randomSoundReactivePattern() : randomPattern();
-    } else {
+    strip->randomMode = randomMode(value);
+    if (strip->randomMode == NOT_RANDOM) {
         strip->pattern = findPattern(value);
+    } else {
+        strip->pattern = randomPattern(strip);
     }
 }
 
@@ -287,8 +298,8 @@ void handleLEDs(Strip *strip) {
         }
 
         EVERY_N_SECONDS(30) {
-            if (strip->random) {
-                strip->pattern = strip->soundReactive ? randomSoundReactivePattern() : randomPattern();
+            if (strip->randomMode != NOT_RANDOM) {
+                strip->pattern = randomPattern(strip);
             }
         }
 
@@ -419,18 +430,26 @@ void loadStripState(File f, Strip *s) {
 
     l = f.readBytesUntil('\n', field, 32);
     field[l] = '\0';
-    s->pattern = !strcmp(field, "none") ? NULL : findPattern(field);
+    s->pattern = NULL;
+    if (strcmp(field, "none")) {
+        processEffect(field, s);
+    }
+}
+
+const char *effect(Strip *s) {
+    return s->randomMode == ALL ? "random" :
+            s->randomMode == SOUND_REACTIVE ? "soundReactive" :
+                s->randomMode == NOT_SOUND_REACTIVE ? "notSoundReactive" :
+                    s->pattern ? s->pattern->name : "none";
 }
 
 void saveState() {
     File f = SPIFFS.open(STATE, "w");
     if (f) {
         f.printf("%s|%d,%d,%d|%d|%s\n", front.on ? "on" : "off",
-                 front.color.red, front.color.green, front.color.blue, front.brightness,
-                 front.pattern ? front.pattern->name : "none");
+                 front.color.red, front.color.green, front.color.blue, front.brightness, effect(&front));
         f.printf("%s|%d,%d,%d|%d|%s\n", back.on ? "on" : "off",
-                 back.color.red, back.color.green, back.color.blue, back.brightness,
-                 back.pattern ? back.pattern->name : "none");
+                 back.color.red, back.color.green, back.color.blue, back.brightness, effect(&back));
         f.close();
     }
 }
@@ -495,15 +514,13 @@ Pattern *findPattern(const char *name) {
     return &patterns[i];
 }
 
-Pattern *randomPattern() {
-    return &patterns[random8(ARRAY_SIZE(patterns) - 1)];
-}
-
-Pattern *randomSoundReactivePattern() {
+Pattern *randomPattern(Strip *s) {
+    Pattern *old = s->pattern;
     Pattern *p;
     do {
         p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
-    } while (!p->soundReactive);
-
+    } while (p == old ||
+            (s->randomMode == SOUND_REACTIVE && !p->soundReactive) ||
+            (s->randomMode == NOT_SOUND_REACTIVE && p->soundReactive));
     return p;
 }
