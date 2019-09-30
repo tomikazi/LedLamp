@@ -8,16 +8,16 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2019.07.02.001"
+#define SW_VERSION      "2019.09.28.001"
 
-#define STATE      "state"
+#define STATE      "/cfg/state"
 
 #define FRONT_PIN       4
 #define BACK_PIN        5
 
 #define MIC_PIN         A0
 
-#define LED_COUNT               34
+#define LED_COUNT               60
 #define LED_TYPE                WS2812B
 #define COLOR_ORDER             GRB
 #define BRIGHTNESS              96
@@ -364,7 +364,7 @@ void handleMicData() {
 void loop() {
     if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
         wsServer.loop();
-        handleMicData();
+//        handleMicData();
     }
     handleLEDs(&front);
     handleLEDs(&back);
