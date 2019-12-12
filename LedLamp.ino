@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2019.09.28.001"
+#define SW_VERSION      "2019.12.12.001"
 
 #define STATE      "/cfg/state"
 
@@ -100,6 +100,8 @@ uint16_t samplepeak = 0;
 
 Sample sample;
 
+#define OFFLINE_TIMEOUT     15000
+long unsigned offlineTime;
 
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
@@ -130,6 +132,8 @@ void setup() {
 
     setupLED();
     gizmo.endSetup();
+
+    offlineTime = strlen(gizmo.getSSID()) ? millis() + OFFLINE_TIMEOUT : millis();
 }
 
 void setupLED() {
@@ -309,11 +313,6 @@ void handleLEDs(Strip *strip) {
     }
 }
 
-void finishWiFiConnect() {
-    Serial.printf("%s is ready\n", LED_LIGHTS);
-    loadState();
-}
-
 void handleRemoteMicData() {
     if (UDP.parsePacket()) {
         UDP.read((char *) &sample, sizeof(sample));
@@ -365,10 +364,26 @@ void loop() {
     if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
         wsServer.loop();
 //        handleMicData();
+    } else {
+        handleNetworkFailover();
     }
     handleLEDs(&front);
     handleLEDs(&back);
 }
+
+void finishWiFiConnect() {
+    Serial.printf("%s is ready\n", LED_LIGHTS);
+    offlineTime = 0;
+    loadState();
+}
+
+void handleNetworkFailover() {
+    if (offlineTime && millis() > offlineTime) {
+        gizmo.setNoNetworkConfig();
+        finishWiFiConnect();
+    }
+}
+
 
 void handleRoot() {
     File f = SPIFFS.open("/index.html", "r");
@@ -411,6 +426,9 @@ void loadState() {
         loadStripState(f, &front);
         loadStripState(f, &back);
         f.close();
+    } else {
+        front.pattern = findPattern("confetti");
+        back.pattern = findPattern("cycle");
     }
 }
 
