@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2019.12.12.001"
+#define SW_VERSION      "2019.12.26.001"
 
 #define STATE      "/cfg/state"
 
@@ -276,12 +276,14 @@ void handleLEDs(Strip *strip) {
         EVERY_N_MILLISECONDS(20) {
             uint8_t maxChanges = 24;
             nblendPaletteTowardPalette(strip->currentPalette, strip->targetPalette, maxChanges);
+            // TODO: potential broadcast point for a synchronized setup
         }
 
         // Sets initial timing only. Changes here don't do anything
         EVERY_N_MILLIS_I(hueTimer, 20) {
             strip->hue++; // slowly cycle the "base color" through the rainbow
             hueTimer.setPeriod(strip->pattern->huePause);
+            // TODO: potential broadcast point for a synchronized setup
         }
 
         EVERY_N_MILLIS_I(renderTimer, 20) {
@@ -299,11 +301,13 @@ void handleLEDs(Strip *strip) {
                     CHSV(baseclr + random8(64), 255, random8(128,255)),
                     CHSV(baseclr + random8(64), 192, random8(128,255)),
                     CHSV(baseclr + random8(64), 255, random8(128,255)));
+            // TODO: potential broadcast point for a synchronized setup
         }
 
         EVERY_N_SECONDS(30) {
             if (strip->randomMode != NOT_RANDOM) {
                 strip->pattern = randomPattern(strip);
+                // TODO: potential broadcast point for a synchronized setup
             }
         }
 
