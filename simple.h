@@ -1,4 +1,8 @@
 
+void solid(Strip *s) {
+    fill_solid(s->leds, LED_COUNT, s->color);
+}
+
 void test(Strip *s) {
     fill_solid(s->leds, LED_COUNT, CRGB::White);
     s->leds[0] = CRGB::Green;

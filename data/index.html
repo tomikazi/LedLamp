@@ -134,7 +134,7 @@
                 send("get", "status");
             });
 
-            $('label[for="all"]').css('background', '#2196F3');
+            $('label[for="front"]').css('background', '#2196F3');
 
             startWebSocket();
             setInterval(checkWebSocket, 3000);
@@ -329,8 +329,8 @@
         <p>
         <div class="led-selector">
             <label for="all">All</label><label for="front">Front</label><label for="back">Back</label>
-            <input type="radio" class="stv-radio-button" name="led" value="all" id="all" checked />
-            <input type="radio" class="stv-radio-button" name="led" value="front" id="front" />
+            <input type="radio" class="stv-radio-button" name="led" value="all" id="all" />
+            <input type="radio" class="stv-radio-button" name="led" value="front" id="front" checked/>
             <input type="radio" class="stv-radio-button" name="led" value="back" id="back" />
         </div>
         <p>
@@ -352,7 +352,7 @@
                 <option value="none" selected>-- Select Effect --</option>
                 <option value="random">All Effects</option>
                 <option value="soundReactive">All Sound Reactive Effects</option>
-                <option value="notSoundReactive">All Effects</option>
+                <option value="notSoundReactive">All Non-Sound Reactive Effects</option>
                 <option value="pixel">Pixel *</option>
                 <option value="pixels">Pixels *</option>
                 <option value="ripple">Ripple *</option>
@@ -377,6 +377,7 @@
                 <option value="sinelon">Particle</option>
                 <option value="rainbow">Rainbow</option>
                 <option value="rainbowWithGlitter">Rainbbow with Glitter</option>
+                <option value="solid">Solid Color</option>
                 <option value="test">Test Pattern</option>
             </select>
         </div>
