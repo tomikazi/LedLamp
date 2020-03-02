@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2019.12.26.001"
+#define SW_VERSION      "2020.03.01.001"
 
 #define STATE      "/cfg/state"
 
@@ -83,22 +83,18 @@ Strip back = {
 
 static WebSocketsServer wsServer(81);
 
-#define MAX_SAMPLES     8
 typedef struct {
-    uint16_t count;
-    uint16_t data[MAX_SAMPLES];
-} Sample;
-
-// For moving averages
-uint32_t mat = 0;
-uint32_t nmat = 0;
+    uint16_t sampleavg;
+    uint16_t samplepeak;
+    uint16_t oldsample;
+} MicSample;
 
 // Sample average, max and peak detection
 uint16_t sampleavg = 0;
-uint16_t oldsample = 0;
 uint16_t samplepeak = 0;
+uint16_t oldsample = 0;
 
-Sample sample;
+MicSample sample;
 
 #define OFFLINE_TIMEOUT     15000
 long unsigned offlineTime;
@@ -320,54 +316,17 @@ void handleLEDs(Strip *strip) {
 void handleRemoteMicData() {
     if (UDP.parsePacket()) {
         UDP.read((char *) &sample, sizeof(sample));
-        samplepeak = 0;
-        for (int i = 0; i < sample.count; i++) {
-            uint16_t v = constrain(sample.data[i], 0, 64);
-            v = map(v, 0, 64, 0, 255);
-
-            mat = mat + v - (mat >> 4);
-            sampleavg = mat >> 4;
-
-            if (!samplepeak && v > 200)
-                samplepeak = 1;
-
-            Serial.printf("-50, 100, %d, %d, %d\n", v, sampleavg, samplepeak * -20);
-
-            if (v > oldsample)
-                oldsample = v;
-        }
-    }
-}
-
-void handleMicData() {
-    EVERY_N_MILLISECONDS(5) {
-        uint16_t v = analogRead(MIC_PIN);
-
-        mat = mat + v - (mat >> 8);
-        uint16_t av = abs(v - (mat >> 8));
-
-        if (av < 4) {
-            av = 0;
-        } else if (av > 128) {
-            av = 128;
-        }
-
-        av = map(av, 0, 128, 0, 255);
-        nmat = nmat + av - (nmat >> 4);
-        sampleavg = nmat >> 4;
-
-        // We're on the down swing, so we just peaked.
-        samplepeak = av > (sampleavg + 16) && (av < oldsample);
-
-        Serial.printf("255, %d, %d, %d\n", av, sampleavg, samplepeak * 200);
-        oldsample = av;
+        samplepeak = sample.samplepeak;
+        sampleavg = sample.sampleavg;
+        oldsample = sample.oldsample;
+        Serial.printf("-50, 100, %d, %d\n", sampleavg, samplepeak * -20);
     }
 }
 
 void loop() {
     if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
         wsServer.loop();
-//        handleMicData();
+        handleRemoteMicData();
     } else {
         handleNetworkFailover();
     }
