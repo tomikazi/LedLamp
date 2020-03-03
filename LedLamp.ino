@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.02.007"
+#define SW_VERSION      "2020.03.02.009"
 
 #define STATE      "/cfg/state"
 
@@ -68,6 +68,7 @@ struct StripRec {
     CRGBPalette16 targetPalette;
     TBlendType currentBlending;
     RandomMode randomMode;
+    uint32_t th, tb, tp, t0, t1, t2, t3, t4;
     byte *data;
 };
 
@@ -78,13 +79,15 @@ Strip front = {
         .name = "front", .on = true, .color = CRGB::Red, .brightness = BRIGHTNESS,
         .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
-        .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM, .data = frontData
+        .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM,
+        .th = 0, .tb = 0, .tp = 0, .t0 = 0, .t1 = 0, .t2 = 0, .t3 = 0, .t4 = 0, .data = frontData
 };
 Strip back = {
         .name = "back", .on = true, .color = CRGB::Green, .brightness = BRIGHTNESS,
         .leds = &backLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
-        .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM, .data = backData
+        .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM,
+        .th = 0, .tb = 0, .tp = 0, .t0 = 0, .t1 = 0, .t2 = 0, .t3 = 0, .t4 = 0, .data = backData
 };
 
 static WebSocketsServer wsServer(81);
@@ -294,29 +297,28 @@ void messageBuddy() {
     buddy.flush();
 }
 
+#define EVERY_X_MILLIS(T, N)  if (T < millis()) { T = millis() + N;
+
 void handleLEDs(Strip *strip) {
     if (strip->on && strip->pattern) {
-        EVERY_N_MILLISECONDS(20) {
+        EVERY_X_MILLIS(strip->tb, 20)
             uint8_t maxChanges = 24;
             nblendPaletteTowardPalette(strip->currentPalette, strip->targetPalette, maxChanges);
             // TODO: potential broadcast point for a synchronized setup
         }
 
-        // Sets initial timing only. Changes here don't do anything
-        EVERY_N_MILLIS_I(hueTimer, 20) {
+        EVERY_X_MILLIS(strip->th, strip->pattern->huePause)
             strip->hue++; // slowly cycle the "base color" through the rainbow
-            hueTimer.setPeriod(strip->pattern->huePause);
             // TODO: potential broadcast point for a synchronized setup
         }
 
-        EVERY_N_MILLIS_I(renderTimer, 20) {
-            renderTimer.setPeriod(strip->pattern->renderPause);
+        EVERY_X_MILLIS(strip->t1, strip->pattern->renderPause)
             strip->pattern->renderer(strip);
             strip->ctl->showLeds(strip->brightness);
         }
 
         // Change the target palette to a 'related colours' palette every 5 seconds.
-        EVERY_N_SECONDS(5) {
+        EVERY_X_MILLIS(strip->tp, 5000)
             // This is the base colour. Other colours are within 16 hues of this. One color is 128 + baseclr.
             uint8_t baseclr = random8();
             strip->targetPalette = CRGBPalette16(
@@ -327,7 +329,7 @@ void handleLEDs(Strip *strip) {
             // TODO: potential broadcast point for a synchronized setup
         }
 
-        EVERY_N_SECONDS(30) {
+        EVERY_X_MILLIS(strip->t0, 30000)
             if (strip->randomMode != NOT_RANDOM) {
                 strip->pattern = randomPattern(strip);
                 messageBuddy();
@@ -510,7 +512,7 @@ Pattern patterns[] = {
         Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20, .soundReactive = false },
         Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20, .soundReactive = false },
         Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 10, .soundReactive = false },
+        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20, .soundReactive = false },
         Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20, .soundReactive = false },
         Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20, .soundReactive = false },
         Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20, .soundReactive = false },

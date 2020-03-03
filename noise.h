@@ -2,20 +2,20 @@
 #define SCALE 30
 
 void noise(Strip *s) {
-    EVERY_N_MILLISECONDS(10) {
+    EVERY_X_MILLIS(s->t2, 10)
         // Blend towards the target palette over 48 iterations
         nblendPaletteTowardPalette(s->currentPalette, s->targetPalette, 48);
         fillnoise8(s);
     }
 
     // Change the target palette to a random one every 5 seconds.
-    EVERY_N_SECONDS(5) {
+    EVERY_X_MILLIS(s->t4, 5000)
         s->targetPalette = CRGBPalette16(CHSV(random8(), 255, random8(128,255)),
                                          CHSV(random8(), 255, random8(128,255)),
                                          CHSV(random8(), 192, random8(128,255)),
                                          CHSV(random8(), 255, random8(128,255)));
     }
-} // loop()
+}
 
 void fillnoise8(Strip *s) {
     // A random number for our noise generator.

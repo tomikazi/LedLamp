@@ -1,7 +1,6 @@
 
 // A 'Matrix' like display using sampleavg for brightness. Also add glitter based on peaks (and not sampleavg).
 void matrix(Strip *s) {
-
     static uint8_t thishue = 0;
 
     s->leds[0] = ColorFromPalette(s->currentPalette, thishue++, sampleavg * 2, s->currentBlending);

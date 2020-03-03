@@ -4,17 +4,17 @@
 #define qsuba(x, b)  ((x>b)?x-b:0)                            // Analog Unsigned subtraction macro. if result <0, then => 0
 
 void plasma(Strip *s) {
-    EVERY_N_MILLISECONDS(50) {
+    EVERY_X_MILLIS(s->t2, 50)
         doPlasma(s);
     }
 
-    EVERY_N_MILLISECONDS(100) {
+    EVERY_X_MILLIS(s->t3, 100)
         uint8_t maxChanges = 24;
         nblendPaletteTowardPalette(s->currentPalette, s->targetPalette, maxChanges);   // AWESOME palette blending capability.
     }
 
     // Change the target palette to a random one every 5 seconds.
-    EVERY_N_SECONDS(5) {
+    EVERY_X_MILLIS(s->t4, 5000)
         // You can use this as a baseline colour if you want similar hues in the next line.
         uint8_t baseC = random8();
         s->targetPalette = CRGBPalette16(CHSV(baseC+random8(32), 192, random8(128,255)),

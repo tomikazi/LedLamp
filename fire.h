@@ -9,8 +9,7 @@
 #define SPARKING    100
 
 void fire(Strip *s) {
-    EVERY_N_MILLISECONDS(10)
-    {
+    EVERY_X_MILLIS(s->t2, 10)
         // Step 1.  Cool down every cell a little
         for (int i = 0; i < LED_COUNT; i++) {
             s->data[i] = qsub8(s->data[i], random8(0, ((COOLING * 10) / LED_COUNT) + 2));
