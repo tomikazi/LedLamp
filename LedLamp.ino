@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.02.006"
+#define SW_VERSION      "2020.03.02.007"
 
 #define STATE      "/cfg/state"
 
@@ -100,6 +100,7 @@ typedef struct {
 typedef struct {
     uint16_t op;
     uint16_t param;
+    uint32_t src;
 } Command;
 
 // Sample average, max and peak detection
@@ -283,12 +284,14 @@ void broadcastState() {
 
 void messageBuddy() {
     Command command;
+    command.src = (uint32_t) WiFi.localIP();
     command.op = SAMPLE;
     command.param = (back.on && back.pattern && back.pattern->soundReactive) ||
                         (front.on && front.pattern && front.pattern->soundReactive);
     buddy.beginPacketMulticast(buddyIp, BUDDY_PORT, WiFi.localIP());
     buddy.write((char *) &command, sizeof(command));
     buddy.endPacket();
+    buddy.flush();
 }
 
 void handleLEDs(Strip *strip) {
