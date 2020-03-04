@@ -15,7 +15,7 @@
             let ctx = canvas.getContext('2d');
             let ws, lastHeard;
             let masterIp = null;
-            let buddyAvailable = false;
+            let srSaved;
 
             let image = new Image();
             image.onload = function () {
@@ -33,9 +33,9 @@
                 masterIp = !d.isMaster ? d.masterIp : null;
 
                 if (d.buddyAvailable) {
-                    $("#effect option").show();
+                    $('#effect option').eq(1).after(srSaved);
                 } else {
-                    $("#effect option[value*='sr_']").hide();
+                    srSaved = $("#effect option[value*='sr_']").detach();
                 }
 
                 if (d.hasPotentialMaster) {
