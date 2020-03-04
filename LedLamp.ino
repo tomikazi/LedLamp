@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.02.009"
+#define SW_VERSION      "2020.03.03.003"
 
 #define STATE      "/cfg/state"
 
@@ -29,7 +29,7 @@
 WiFiUDP udp;
 WiFiUDP buddy;
 
-IPAddress buddyIp(224,0,42,69);
+IPAddress buddyIp(224, 0, 42, 69);
 
 CRGB frontLeds[LED_COUNT];
 CRGB backLeds[LED_COUNT];
@@ -45,7 +45,7 @@ typedef struct Pattern {
     Renderer renderer;
     uint32_t huePause;
     uint32_t renderPause;
-    boolean  soundReactive;
+    boolean soundReactive;
 } Pattern;
 
 typedef enum {
@@ -98,12 +98,29 @@ typedef struct {
     uint16_t oldsample;
 } MicSample;
 
-#define SAMPLE  100
+#define PEER_TIMEOUT   10000
 
+#define MAX_LAMPS   4
+uint32_t peerIps[MAX_LAMPS];
+uint32_t peerTimes[MAX_LAMPS];
+
+uint32_t master = 0;
+
+#define FRONT_CTX       0x01
+#define BACK_CTX        0x10
+#define ALL_CTX         FRONT_CTX | BACK_CTX
+
+#define HELLO           001
+#define SAMPLE_REQ      100
+#define PATTERN         201
+#define COLORS          202
+
+#define MAX_CMD_DATA    64
 typedef struct {
-    uint16_t op;
-    uint16_t param;
     uint32_t src;
+    uint16_t ctx;
+    uint16_t op;
+    uint8_t  data[MAX_CMD_DATA];
 } Command;
 
 // Sample average, max and peak detection
@@ -198,8 +215,8 @@ void processBrightness(char *value, Strip *strip) {
 
 RandomMode randomMode(const char *name) {
     return !strcmp(name, "random") ? ALL :
-                !strcmp(name, "soundReactive") ? SOUND_REACTIVE :
-                    !strcmp(name, "notSoundReactive") ? NOT_SOUND_REACTIVE : NOT_RANDOM;
+           !strcmp(name, "soundReactive") ? SOUND_REACTIVE :
+           !strcmp(name, "notSoundReactive") ? NOT_SOUND_REACTIVE : NOT_RANDOM;
 }
 
 void processEffect(char *value, Strip *strip) {
@@ -222,12 +239,13 @@ void processCallback(char *topic, char *value, Strip *strip) {
     } else {
         processOnOff(value, strip);
     }
-    messageBuddy();
     saveState();
+    syncPattern(strip);
+    syncColorSettings(strip);
+    requestSamples();
 }
 
 
-// MQTT Callback
 void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     char value[64];
     value[0] = '\0';
@@ -247,7 +265,7 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     }
 }
 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
     switch (type) {
         case WStype_DISCONNECTED:
             Serial.printf("[%u] Disconnected.\n", num);
@@ -285,17 +303,155 @@ void broadcastState() {
     wsServer.broadcastTXT(state);
 }
 
-void messageBuddy() {
-    Command command;
-    command.src = (uint32_t) WiFi.localIP();
-    command.op = SAMPLE;
-    command.param = (back.on && back.pattern && back.pattern->soundReactive) ||
-                        (front.on && front.pattern && front.pattern->soundReactive);
+void broadcast(Command command) {
     buddy.beginPacketMulticast(buddyIp, BUDDY_PORT, WiFi.localIP());
     buddy.write((char *) &command, sizeof(command));
     buddy.endPacket();
-    buddy.flush();
 }
+
+void requestSamples() {
+    boolean needSamples = (back.on && back.brightness && back.pattern && back.pattern->soundReactive) ||
+                          (front.on && front.brightness && front.pattern && front.pattern->soundReactive);
+    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = SAMPLE_REQ, .data = { [0] = needSamples}});
+}
+
+void sayHello() {
+    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = HELLO, .data = { [0] = 0}});
+}
+
+void syncPattern(Strip *s) {
+    uint16_t ctx = s == &front ? FRONT_CTX : BACK_CTX;
+    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = PATTERN, .data = { [0] = 0}};
+    strncat((char *) cmd.data, s->pattern->name, MAX_CMD_DATA);
+    broadcast(cmd);
+}
+
+void syncColorSettings(Strip *s) {
+    uint16_t ctx = s == &front ? FRONT_CTX : BACK_CTX;
+    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = COLORS, .data = { [0] = 0}};
+    cmd.data[0] = s->hue;
+    cmd.data[1] = s->brightness;
+    cmd.data[2] = s->color.raw[0];
+    cmd.data[3] = s->color.raw[1];
+    cmd.data[4] = s->color.raw[2];
+
+    for (int i = 0, di = 5; i < 16; i++, di += 3) {
+        cmd.data[di+0] = s->targetPalette.entries[i].raw[0];
+        cmd.data[di+1] = s->targetPalette.entries[i].raw[1];
+        cmd.data[di+2] = s->targetPalette.entries[i].raw[2];
+    }
+    broadcast(cmd);
+}
+
+void addPeer(uint32_t ip) {
+    int ai = -1;
+    for (int i = 0; i < MAX_LAMPS; i++) {
+        if (ip == peerIps[i]) {
+            peerTimes[ai] = millis() + PEER_TIMEOUT;
+            return;
+        }
+        if (ai < 0 && !peerIps[i]) {
+            ai = i;
+        }
+    }
+    if (ai >= 0) {
+        peerIps[ai] = ip;
+        peerTimes[ai] = millis() + PEER_TIMEOUT;
+        Serial.printf("Peer %s discovered\n", IPAddress(ip).toString().c_str());
+    }
+}
+
+void determineMaster() {
+    master = (uint32_t) WiFi.localIP();
+    for (int i = 0; i < MAX_LAMPS; i++) {
+        if (peerIps[i] && master > peerIps[i]) {
+            master = peerIps[i];
+        }
+    }
+}
+
+boolean isMaster(IPAddress ip) {
+    return master == (uint32_t) ip;
+}
+
+void copyPattern(Command command) {
+    if (isMaster(command.src)) {
+        if (command.ctx == FRONT_CTX) {
+            front.pattern = findPattern((char *)command.data);
+        } else if (command.ctx == BACK_CTX) {
+            back.pattern = findPattern((char *)command.data);
+        }
+    }
+}
+
+void copyStripColorSettings(Strip *s, Command cmd) {
+    s->hue = cmd.data[0];
+    s->brightness = cmd.data[1];
+    s->color.raw[0] = cmd.data[2];
+    s->color.raw[1] = cmd.data[3];
+    s->color.raw[2] = cmd.data[4];
+    for (int i = 0, di = 5; i < 16; i++, di += 3) {
+        s->targetPalette.entries[i].raw[0] = cmd.data[di+0];
+        s->targetPalette.entries[i].raw[1] = cmd.data[di+1];
+        s->targetPalette.entries[i].raw[2] = cmd.data[di+2];
+    }
+    s->on = s->brightness != 0;
+}
+
+void copyColorSettings(Command command) {
+    if (isMaster(command.src)) {
+        if (command.ctx == FRONT_CTX) {
+            copyStripColorSettings(&front, command);
+        } else if (command.ctx == BACK_CTX) {
+            copyStripColorSettings(&back, command);
+        }
+    }
+}
+
+void prunePeers() {
+    uint32_t now = millis();
+    for (int i = 0; i < MAX_LAMPS; i++) {
+        if (peerIps[i] && peerTimes[i] < now) {
+            peerIps[i] = 0;
+            peerTimes[i] = 0;
+        }
+    }
+    determineMaster();
+}
+
+void handlePeers() {
+    EVERY_N_SECONDS(3) {
+        sayHello();
+        requestSamples();
+        prunePeers();
+    }
+
+    Command command;
+    while (buddy.parsePacket()) {
+        int len = buddy.read((char *) &command, sizeof(command));
+        if (len < 0) {
+            Serial.printf("Unable to read command!!!!\n");
+        }
+
+        if (command.src != (uint32_t) WiFi.localIP()) {
+            switch (command.op) {
+                case HELLO:
+                    addPeer(command.src);
+                    determineMaster();
+                    break;
+                case PATTERN:
+                    copyPattern(command);
+                    break;
+                case COLORS:
+                    copyColorSettings(command);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+}
+
 
 #define EVERY_X_MILLIS(T, N)  if (T < millis()) { T = millis() + N;
 
@@ -304,12 +460,10 @@ void handleLEDs(Strip *strip) {
         EVERY_X_MILLIS(strip->tb, 20)
             uint8_t maxChanges = 24;
             nblendPaletteTowardPalette(strip->currentPalette, strip->targetPalette, maxChanges);
-            // TODO: potential broadcast point for a synchronized setup
         }
 
         EVERY_X_MILLIS(strip->th, strip->pattern->huePause)
             strip->hue++; // slowly cycle the "base color" through the rainbow
-            // TODO: potential broadcast point for a synchronized setup
         }
 
         EVERY_X_MILLIS(strip->t1, strip->pattern->renderPause)
@@ -319,21 +473,25 @@ void handleLEDs(Strip *strip) {
 
         // Change the target palette to a 'related colours' palette every 5 seconds.
         EVERY_X_MILLIS(strip->tp, 5000)
-            // This is the base colour. Other colours are within 16 hues of this. One color is 128 + baseclr.
-            uint8_t baseclr = random8();
-            strip->targetPalette = CRGBPalette16(
-                    CHSV(baseclr + random8(64), 255, random8(128,255)),
-                    CHSV(baseclr + random8(64), 255, random8(128,255)),
-                    CHSV(baseclr + random8(64), 192, random8(128,255)),
-                    CHSV(baseclr + random8(64), 255, random8(128,255)));
-            // TODO: potential broadcast point for a synchronized setup
+            if (isMaster(WiFi.localIP())) {
+                // This is the base colour. Other colours are within 16 hues of this. One color is 128 + baseclr.
+                uint8_t baseclr = random8();
+                strip->targetPalette = CRGBPalette16(
+                        CHSV(baseclr + random8(64), 255, random8(128, 255)),
+                        CHSV(baseclr + random8(64), 255, random8(128, 255)),
+                        CHSV(baseclr + random8(64), 192, random8(128, 255)),
+                        CHSV(baseclr + random8(64), 255, random8(128, 255)));
+                syncColorSettings(strip);
+            }
         }
 
         EVERY_X_MILLIS(strip->t0, 30000)
-            if (strip->randomMode != NOT_RANDOM) {
-                strip->pattern = randomPattern(strip);
-                messageBuddy();
-                // TODO: potential broadcast point for a synchronized setup
+            if (isMaster(WiFi.localIP())) {
+                if (strip->randomMode != NOT_RANDOM) {
+                    strip->pattern = randomPattern(strip);
+                    syncPattern(strip);
+                    requestSamples();
+                }
             }
         }
 
@@ -344,10 +502,6 @@ void handleLEDs(Strip *strip) {
 }
 
 void handleRemoteMicData() {
-    EVERY_N_SECONDS(3) {
-        messageBuddy();
-    }
-
     if (lastSample && lastSample < millis()) {
         lastSample = 0;
         samplepeak = 0;
@@ -369,6 +523,7 @@ void handleRemoteMicData() {
 void loop() {
     if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
         wsServer.loop();
+        handlePeers();
         handleRemoteMicData();
     } else {
         handleNetworkFailover();
@@ -384,7 +539,10 @@ void finishWiFiConnect() {
     udp.begin(GROUP_PORT);
     buddy.beginMulticast(WiFi.localIP(), buddyIp, BUDDY_PORT);
 
-    messageBuddy();
+    determineMaster();
+    sayHello();
+    requestSamples();
+
     Serial.printf("%s is ready\n", LED_LIGHTS);
 }
 
@@ -467,9 +625,9 @@ void loadStripState(File f, Strip *s) {
 
 const char *effect(Strip *s) {
     return s->randomMode == ALL ? "random" :
-            s->randomMode == SOUND_REACTIVE ? "soundReactive" :
-                s->randomMode == NOT_SOUND_REACTIVE ? "notSoundReactive" :
-                    s->pattern ? s->pattern->name : "solid";
+           s->randomMode == SOUND_REACTIVE ? "soundReactive" :
+           s->randomMode == NOT_SOUND_REACTIVE ? "notSoundReactive" :
+           s->pattern ? s->pattern->name : "solid";
 }
 
 void saveState() {
@@ -504,34 +662,34 @@ void saveState() {
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
-        Pattern{.name = "glitter", .renderer = glitter, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "confetti", .renderer = confetti, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "rainbow", .renderer = rainbow, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false },
+        Pattern{.name = "glitter", .renderer = glitter, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "confetti", .renderer = confetti, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "rainbow", .renderer = rainbow, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "rainbowWithGlitter", .renderer = rainbowWithGlitter, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false},
 
-        Pattern{.name = "pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true },
-        Pattern{.name = "pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true },
-        Pattern{.name = "ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20, .soundReactive = true },
-        Pattern{.name = "matrix", .renderer = matrix, .huePause = 2000, .renderPause = 40, .soundReactive = true },
-        Pattern{.name = "onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30, .soundReactive = true },
-        Pattern{.name = "noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0, .soundReactive = true },
-        Pattern{.name = "noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0, .soundReactive = true },
-        Pattern{.name = "rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10, .soundReactive = true },
-        Pattern{.name = "besin", .renderer = besin, .huePause = 2000, .renderPause = 20, .soundReactive = true },
-        Pattern{.name = "fillnoise", .renderer = fillnoise, .huePause = 2000, .renderPause = 20, .soundReactive = true },
-        Pattern{.name = "plasmasr", .renderer = plasmasr, .huePause = 2000, .renderPause = 10, .soundReactive = true },
+        Pattern{.name = "pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true},
+        Pattern{.name = "pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true},
+        Pattern{.name = "ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20, .soundReactive = true},
+        Pattern{.name = "matrix", .renderer = matrix, .huePause = 2000, .renderPause = 40, .soundReactive = true},
+        Pattern{.name = "onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30, .soundReactive = true},
+        Pattern{.name = "noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0, .soundReactive = true},
+        Pattern{.name = "noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0, .soundReactive = true},
+        Pattern{.name = "rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10, .soundReactive = true},
+        Pattern{.name = "besin", .renderer = besin, .huePause = 2000, .renderPause = 20, .soundReactive = true},
+        Pattern{.name = "fillnoise", .renderer = fillnoise, .huePause = 2000, .renderPause = 20, .soundReactive = true},
+        Pattern{.name = "plasmasr", .renderer = plasmasr, .huePause = 2000, .renderPause = 10, .soundReactive = true},
 
-        Pattern{.name = "solid", .renderer = solid, .huePause = 2000, .renderPause = 20, .soundReactive = false },
-        Pattern{.name = "test", .renderer = test, .huePause = 20, .renderPause = 20, .soundReactive = false }
+        Pattern{.name = "solid", .renderer = solid, .huePause = 2000, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "test", .renderer = test, .huePause = 20, .renderPause = 20, .soundReactive = false}
 };
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
@@ -550,7 +708,7 @@ Pattern *randomPattern(Strip *s) {
     do {
         p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
     } while (p == old ||
-            (s->randomMode == SOUND_REACTIVE && !p->soundReactive) ||
-            (s->randomMode == NOT_SOUND_REACTIVE && p->soundReactive));
+             (s->randomMode == SOUND_REACTIVE && !p->soundReactive) ||
+             (s->randomMode == NOT_SOUND_REACTIVE && p->soundReactive));
     return p;
 }
