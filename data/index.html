@@ -15,6 +15,7 @@
             let ctx = canvas.getContext('2d');
             let ws, lastHeard;
             let masterIp = null;
+            let buddyAvailable = false;
 
             let image = new Image();
             image.onload = function () {
@@ -30,6 +31,12 @@
                 $('#version').html(d.version);
                 $('#error').html(d.isMaster ? '&nbsp;' : 'Controlled by ' + d.masterIp);
                 masterIp = !d.isMaster ? d.masterIp : null;
+
+                if (d.buddyAvailable) {
+                    $("#effect option").show();
+                } else {
+                    $("#effect option[value*='sr_']").hide();
+                }
             }
 
             function send(t, m) {
@@ -319,6 +326,12 @@
             width: 300px;
             height: 40px;
             outline: none;
+            text-align-last: center;
+            text-align: center;
+        }
+
+        .effectcontainer option {
+            text-align: center;
         }
 
 
@@ -361,19 +374,19 @@
             <select id="effect">
                 <option value="none" selected>-- Select Effect --</option>
                 <option value="random">All Effects</option>
-                <option value="sr_random">All Sound Reactive Effects</option>
+                <option value="sr_random">All Sound Reactive Effects &#9836</option>
                 <option value="nsr_random">All Non-Sound Reactive Effects</option>
-                <option value="sr_pixel">Pixel *</option>
-                <option value="sr_pixels">Pixels *</option>
-                <option value="sr_ripple">Ripple *</option>
-                <option value="sr_matrix">Matrix *</option>
-                <option value="sr_onesine">One Sine *</option>
-                <option value="sr_noisefire">Noise Fire *</option>
-                <option value="sr_noisepal">Noise Split Fire *</option>
-                <option value="sr_rainbowg">Rainbow Glitter *</option>
-                <option value="sr_besin">Besin *</option>
-                <option value="sr_fillnoise">Fill Noise *</option>
-                <option value="sr_plasma">Plasma *</option>
+                <option value="sr_pixel">Pixel &#9836</option>
+                <option value="sr_pixels">Pixels &#9836</option>
+                <option value="sr_ripple">Ripple &#9836</option>
+                <option value="sr_matrix">Matrix &#9836</option>
+                <option value="sr_onesine">One Sine &#9836</option>
+                <option value="sr_noisefire">Noise Fire &#9836</option>
+                <option value="sr_noisepal">Noise Split Fire &#9836</option>
+                <option value="sr_rainbowg">Rainbow Glitter &#9836</option>
+                <option value="sr_besin">Besin &#9836</option>
+                <option value="sr_fillnoise">Fill Noise &#9836</option>
+                <option value="sr_plasma">Plasma &#9836</option>
                 <option value="glitter">Glitter</option>
                 <option value="confetti">Confetti</option>
                 <option value="cycle">Slow Cycle</option>
