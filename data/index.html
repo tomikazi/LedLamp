@@ -19,7 +19,7 @@
             image.onload = function () {
                 ctx.drawImage(image, 0, 0, image.width, image.height);
             };
-            image.src = "colorpicker.png";
+            image.src = "colorwheel.png";
 
             function process(d) {
                 let b = $('.led-selector #back').prop('checked');
@@ -351,19 +351,19 @@
             <select id="effect">
                 <option value="none" selected>-- Select Effect --</option>
                 <option value="random">All Effects</option>
-                <option value="soundReactive">All Sound Reactive Effects</option>
-                <option value="notSoundReactive">All Non-Sound Reactive Effects</option>
-                <option value="pixel">Pixel *</option>
-                <option value="pixels">Pixels *</option>
-                <option value="ripple">Ripple *</option>
-                <option value="matrix">Matrix *</option>
-                <option value="onesine">One Sine *</option>
-                <option value="noisefire">Noise Fire *</option>
-                <option value="noisepal">Noise Split Fire *</option>
-                <option value="rainbowg">Rainbow Glitter *</option>
-                <option value="besin">Besin *</option>
-                <option value="fillnoise">Fill Noise *</option>
-                <option value="plasmasr">Plasma *</option>
+                <option value="sr_random">All Sound Reactive Effects</option>
+                <option value="nsr_random">All Non-Sound Reactive Effects</option>
+                <option value="sr_pixel">Pixel *</option>
+                <option value="sr_pixels">Pixels *</option>
+                <option value="sr_ripple">Ripple *</option>
+                <option value="sr_matrix">Matrix *</option>
+                <option value="sr_onesine">One Sine *</option>
+                <option value="sr_noisefire">Noise Fire *</option>
+                <option value="sr_noisepal">Noise Split Fire *</option>
+                <option value="sr_rainbowg">Rainbow Glitter *</option>
+                <option value="sr_besin">Besin *</option>
+                <option value="sr_fillnoise">Fill Noise *</option>
+                <option value="sr_plasma">Plasma *</option>
                 <option value="glitter">Glitter</option>
                 <option value="confetti">Confetti</option>
                 <option value="cycle">Slow Cycle</option>
@@ -376,7 +376,7 @@
                 <option value="juggle">Juggle</option>
                 <option value="sinelon">Particle</option>
                 <option value="rainbow">Rainbow</option>
-                <option value="rainbowWithGlitter">Rainbbow with Glitter</option>
+                <option value="rainbowg">Rainbbow with Glitter</option>
                 <option value="solid">Solid Color</option>
                 <option value="test">Test Pattern</option>
             </select>
