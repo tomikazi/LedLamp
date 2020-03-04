@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.03.007"
+#define SW_VERSION      "2020.03.03.008"
 
 #define STATE      "/cfg/state"
 
@@ -351,7 +351,7 @@ void addPeer(uint32_t ip) {
     int ai = -1;
     for (int i = 0; i < MAX_LAMPS; i++) {
         if (ip == peerIps[i]) {
-            peerTimes[ai] = millis() + PEER_TIMEOUT;
+            peerTimes[i] = millis() + PEER_TIMEOUT;
             return;
         }
         if (ai < 0 && !peerIps[i]) {
@@ -389,7 +389,7 @@ void copyPattern(Command command) {
 }
 
 void copyStripColorSettings(Strip *s, Command cmd) {
-    s->on = cmd.data[0];
+    s->on = cmd.data[0] && cmd.data[2];
     s->hue = cmd.data[1];
     s->brightness = cmd.data[2];
     s->color.raw[0] = cmd.data[3];
@@ -483,35 +483,34 @@ void handleLEDs(Strip *strip) {
             strip->pattern->renderer(strip);
             strip->ctl->showLeds(strip->brightness);
         }
-
-        // Change the target palette to a 'related colours' palette every 5 seconds.
-        EVERY_X_MILLIS(strip->tp, 5000)
-            if (isMaster(WiFi.localIP())) {
-                // This is the base colour. Other colours are within 16 hues of this. One color is 128 + baseclr.
-                uint8_t baseclr = random8();
-                strip->targetPalette = CRGBPalette16(
-                        CHSV(baseclr + random8(64), 255, random8(128, 255)),
-                        CHSV(baseclr + random8(64), 255, random8(128, 255)),
-                        CHSV(baseclr + random8(64), 192, random8(128, 255)),
-                        CHSV(baseclr + random8(64), 255, random8(128, 255)));
-                syncColorSettings(strip);
-                syncPattern(strip);
-            }
-        }
-
-        EVERY_X_MILLIS(strip->t0, 30000)
-            if (isMaster(WiFi.localIP())) {
-                if (strip->randomMode != NOT_RANDOM) {
-                    strip->pattern = randomPattern(strip);
-                    syncPattern(strip);
-                    requestSamples();
-                }
-            }
-        }
-
     } else {
         fill_solid(strip->leds, LED_COUNT, strip->color);
         strip->ctl->showLeds(strip->on ? strip->brightness : 0);
+    }
+
+    // Change the target palette to a 'related colours' palette every 5 seconds.
+    EVERY_X_MILLIS(strip->tp, 5000)
+        if (isMaster(WiFi.localIP())) {
+            // This is the base colour. Other colours are within 16 hues of this. One color is 128 + baseclr.
+            uint8_t baseclr = random8();
+            strip->targetPalette = CRGBPalette16(
+                    CHSV(baseclr + random8(64), 255, random8(128, 255)),
+                    CHSV(baseclr + random8(64), 255, random8(128, 255)),
+                    CHSV(baseclr + random8(64), 192, random8(128, 255)),
+                    CHSV(baseclr + random8(64), 255, random8(128, 255)));
+            syncColorSettings(strip);
+            syncPattern(strip);
+        }
+    }
+
+    EVERY_X_MILLIS(strip->t0, 30000)
+        if (isMaster(WiFi.localIP())) {
+            if (strip->randomMode != NOT_RANDOM) {
+                strip->pattern = randomPattern(strip);
+                syncPattern(strip);
+                requestSamples();
+            }
+        }
     }
 }
 

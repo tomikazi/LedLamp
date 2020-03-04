@@ -14,6 +14,7 @@
             let canvas = document.getElementById('picker');
             let ctx = canvas.getContext('2d');
             let ws, lastHeard;
+            let masterIp = null;
 
             let image = new Image();
             image.onload = function () {
@@ -27,6 +28,8 @@
                 $('#brightness').prop('value', b ? d.back.brightness : d.front.brightness);
                 $('#effect').prop('value', b ? d.back.effect : d.front.effect);
                 $('#version').html(d.version);
+                $('#error').html(d.isMaster ? '&nbsp;' : 'Controlled by ' + d.masterIp);
+                masterIp = !d.isMaster ? d.masterIp : null;
             }
 
             function send(t, m) {
@@ -39,7 +42,7 @@
             }
 
             function markLive(on) {
-                $('#error').html(on ? '' : 'Disconnected');
+                $('#error').html(on ? '&nbsp;' : 'Disconnected');
             }
 
             function startWebSocket() {
@@ -59,7 +62,6 @@
                 };
 
                 ws.onmessage = function (e) {
-                    markLive(true);
                     lastHeard = new Date().getTime();
                     let d = JSON.parse(e.data);
                     console.log('Got message', d);
@@ -86,6 +88,14 @@
                 console.log(m || 'Connection error');
                 markLive(false);
             }
+
+            $('#error').click(function () {
+                if (!ws || ws.readyState !== 1) {
+                    startWebSocket();
+                } else if (masterIp) {
+                    window.location.href = 'http://' + masterIp;
+                }
+            });
 
             $('#picker').click(function (e) {
                 let canvasOffset = $(canvas).offset();
