@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.03.008"
+#define SW_VERSION      "2020.03.03.015"
 
 #define STATE      "/cfg/state"
 
@@ -103,6 +103,7 @@ typedef struct {
 uint32_t peerIps[MAX_LAMPS];
 uint32_t peerTimes[MAX_LAMPS];
 
+boolean syncWithMaster = true;
 uint32_t master = 0;
 boolean buddyAvailable = false;
 uint32_t buddyTimestamp = 0;
@@ -141,6 +142,7 @@ void setup() {
     gizmo.setUpdateURL(SW_UPDATE_URL);
 
     gizmo.setCallback(mqttCallback);
+    gizmo.addTopic("%s/sync");
     gizmo.addTopic("%s/all");
     gizmo.addTopic("%s/all/rgb");
     gizmo.addTopic("%s/all/brightness");
@@ -262,6 +264,12 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
         processCallback(topic, value, &front);
     } else if (strstr(topic, "/back")) {
         processCallback(topic, value, &back);
+
+    } else if (strstr(topic, "/sync")) {
+        syncWithMaster = !strcmp(value, "on");
+        saveState();
+        determineMaster();
+
     } else {
         gizmo.handleMQTTMessage(topic, value);
     }
@@ -301,8 +309,9 @@ void handleWsCommand(char *cmd) {
 void broadcastState() {
     char state[512], f[128], b[128], m[128];
     state[0] = '\0';
-    snprintf(state, 511, "{%s,%s,%s,\"buddyAvailable\": %s,\"version\":\"" SW_VERSION "\"}",
-            stripStatus(f, &front), stripStatus(b, &back), masterStatus(m), buddyAvailable ? "true" : "false");
+    snprintf(state, 511, "{%s,%s,%s,\"buddyAvailable\": %s,\"syncWithMaster\": %s,\"version\":\"" SW_VERSION "\"}",
+            stripStatus(f, &front), stripStatus(b, &back), masterStatus(m),
+            buddyAvailable ? "true" : "false", syncWithMaster ? "true" : "false");
     wsServer.broadcastTXT(state);
 }
 
@@ -365,13 +374,24 @@ void addPeer(uint32_t ip) {
     }
 }
 
-void determineMaster() {
-    master = (uint32_t) WiFi.localIP();
+boolean hasPotentialMaster() {
+    uint32_t ip = (uint32_t) WiFi.localIP();
     for (int i = 0; i < MAX_LAMPS; i++) {
-        if (peerIps[i] && master > peerIps[i]) {
-            master = peerIps[i];
+        if (peerIps[i] && ip > peerIps[i]) {
+            return true;
         }
     }
+    return false;
+}
+
+void determineMaster() {
+    uint32_t ip = (uint32_t) WiFi.localIP();
+    for (int i = 0; syncWithMaster && i < MAX_LAMPS; i++) {
+        if (peerIps[i] && ip > peerIps[i]) {
+            ip = peerIps[i];
+        }
+    }
+    master = ip;
 }
 
 boolean isMaster(IPAddress ip) {
@@ -582,10 +602,11 @@ char *stripStatus(char *html, Strip *s) {
     return html;
 }
 
-#define MASTER_STATUS "\"masterIp\": \"%s\",\"isMaster\": %s"
+#define MASTER_STATUS "\"hasPotentialMaster\": %s,\"masterIp\": \"%s\",\"isMaster\": %s"
 
 char *masterStatus(char *html) {
-    snprintf(html, 127, MASTER_STATUS, IPAddress(master).toString().c_str(),
+    snprintf(html, 127, MASTER_STATUS, hasPotentialMaster() ? "true" : "false",
+            IPAddress(master).toString().c_str(),
             isMaster(WiFi.localIP()) ? "true" : "false");
     return html;
 }
@@ -618,10 +639,16 @@ void loadState() {
     if (f) {
         loadStripState(f, &front);
         loadStripState(f, &back);
+
+        char field[32];
+        f.readBytesUntil('\n', field, 32);
+        syncWithMaster = strcmp(field, "off");
         f.close();
+
     } else {
         front.pattern = findPattern("confetti");
         back.pattern = findPattern("cycle");
+        syncWithMaster = true;
     }
 }
 
@@ -661,6 +688,7 @@ void saveState() {
                  front.color.red, front.color.green, front.color.blue, front.brightness, effect(&front));
         f.printf("%s|%d,%d,%d|%d|%s\n", back.on ? "on" : "off",
                  back.color.red, back.color.green, back.color.blue, back.brightness, effect(&back));
+        f.printf("%s\n", syncWithMaster ? "on" : "off");
         f.close();
     }
 }
