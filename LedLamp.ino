@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.03.015"
+#define SW_VERSION      "2020.03.05.001"
 
 #define STATE      "/cfg/state"
 
@@ -134,9 +134,6 @@ uint16_t oldsample = 0;
 #define SAMPLE_TIMEOUT  1000
 uint32_t lastSample = 0;
 
-#define OFFLINE_TIMEOUT     15000
-uint32_t offlineTime;
-
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL);
@@ -158,16 +155,12 @@ void setup() {
     gizmo.addTopic("%s/back/brightness");
     gizmo.addTopic("%s/back/effect");
 
-    gizmo.httpServer()->on("/", handleRoot);
     gizmo.httpServer()->on("/cmd", handleCommand);
-    gizmo.httpServer()->serveStatic("/", SPIFFS, "/", "max-age=86400");
 
     setupWebSocket();
 
     setupLED();
     gizmo.endSetup();
-
-    offlineTime = strlen(gizmo.getSSID()) ? millis() + OFFLINE_TIMEOUT : millis();
 }
 
 void setupLED() {
@@ -558,15 +551,12 @@ void loop() {
         wsServer.loop();
         handlePeers();
         handleRemoteMicData();
-    } else {
-        handleNetworkFailover();
     }
     handleLEDs(&front);
     handleLEDs(&back);
 }
 
 void finishWiFiConnect() {
-    offlineTime = 0;
     loadState();
 
     buddy.begin(BUDDY_PORT);
@@ -577,20 +567,6 @@ void finishWiFiConnect() {
     requestSamples();
 
     Serial.printf("%s is ready\n", LED_LIGHTS);
-}
-
-void handleNetworkFailover() {
-    if (offlineTime && millis() > offlineTime) {
-        gizmo.setNoNetworkConfig();
-        finishWiFiConnect();
-    }
-}
-
-
-void handleRoot() {
-    File f = SPIFFS.open("/index.html", "r");
-    gizmo.httpServer()->streamFile(f, "text/html");
-    f.close();
 }
 
 #define STRIP_STATUS "\"%s\": {\"on\": %s,\"rgb\": \"%d,%d,%d\",\"brightness\": %d,\"effect\": \"%s\"}"
