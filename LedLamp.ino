@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.05.006"
+#define SW_VERSION      "2020.03.06.002"
 
 #define STATE      "/cfg/state"
 
@@ -113,6 +113,8 @@ boolean syncWithMaster = true;
 boolean buddyAvailable = false;
 uint32_t buddyTimestamp = 0;
 
+boolean hadBuddyAndPeer = false;
+
 #define FRONT_CTX       0x01
 #define BACK_CTX        0x10
 #define ALL_CTX         FRONT_CTX | BACK_CTX
@@ -145,6 +147,7 @@ uint32_t lastSample = 0;
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL);
+    gizmo.debugEnabled = true;
 
     gizmo.setCallback(mqttCallback);
     gizmo.addTopic("%s/sync");
@@ -404,8 +407,7 @@ void addPeer(uint32_t ip, char *name) {
         peers[ai].ip = ip;
         peers[ai].lastHeard = millis() + PEER_TIMEOUT;
         strcpy(peers[ai].name, name);
-        Serial.printf("Peer %s discovered\n", IPAddress(ip).toString().c_str());
-        gizmo.debug("refreshed peer");
+        gizmo.debug("Peer %s discovered", IPAddress(ip).toString().c_str());
     }
 }
 
@@ -470,11 +472,10 @@ void prunePeers() {
     uint8_t peerCount = 0;
     for (int i = 1; i < MAX_PEERS; i++) {
         if (peers[i].ip && peers[i].lastHeard < now) {
+            gizmo.debug("Deleted peer %s", IPAddress(peers[i].ip).toString().c_str());
             peers[i].ip = 0;
             peers[i].lastHeard = 0;
-            gizmo.debug("deleted peer");
-
-        } else {
+        } else if (peers[i].ip) {
             peerCount++;
         }
     }
@@ -483,7 +484,19 @@ void prunePeers() {
     if (buddyTimestamp && buddyTimestamp < millis()) {
         buddyAvailable = false;
         buddyTimestamp = 0;
-        gizmo.debug("deleted buddy");
+        gizmo.debug("Deleted buddy");
+    }
+
+    gizmo.debug("peerCount=%d, buddyAvailable=%d", peerCount, buddyAvailable);
+
+    if (peerCount && buddyAvailable) {
+        hadBuddyAndPeer = true;
+
+    } else if (!peerCount && !buddyAvailable && hadBuddyAndPeer) {
+        gizmo.debug("Restarting group");
+        group.flush();
+        group.stop();
+        group.beginMulticast(WiFi.localIP(), groupIp, GROUP_PORT);
     }
 }
 
@@ -507,7 +520,6 @@ void handlePeers() {
                 case HELLO:
                     addPeer(command.src, (char *) command.data);
                     determineMaster();
-                    gizmo.debug("got hello");
                     break;
                 case SYNC_REQ:
                     syncColorSettings(&front);
@@ -522,9 +534,8 @@ void handlePeers() {
                     copyColorSettings(command);
                     break;
                 case SAMPLE_ADV:
-                    gizmo.debug("got advertisement");
                     if (!buddyAvailable) {
-                        gizmo.debug("refreshed buddy");
+                        gizmo.debug("Discovered buddy");
                     }
                     buddyAvailable = true;
                     buddyTimestamp = millis() + PEER_TIMEOUT;
