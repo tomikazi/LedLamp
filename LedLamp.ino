@@ -192,6 +192,19 @@ void processOnOff(char *value, Strip *strip) {
     strip->on = !strcmp(value, "on");
 }
 
+
+CRGB colorFromCSS(char *css) {
+    char tmp[32];
+    strncpy(tmp, css, 32);
+    uint8_t r, g, b;
+    b = strtol(tmp+5, NULL, 16);
+    tmp[5] = '\0';
+    g = strtol(tmp+3, NULL, 16);
+    tmp[3] = '\0';
+    r = strtol(tmp+1, NULL, 16);
+    return CRGB(r, g, b);
+}
+
 CRGB colorFromCSV(char *csv) {
     char tmp[32];
     strncpy(tmp, csv, 32);
@@ -207,7 +220,11 @@ CRGB colorFromCSV(char *csv) {
 
 void processColor(char *value, Strip *strip) {
     strip->on = true;
-    strip->color = colorFromCSV(value);
+    if (value[0] == '#') {
+        strip->color = colorFromCSS(value);
+    } else {
+        strip->color = colorFromCSV(value);
+    }
     strip->pattern = findPattern("solid");
 }
 
@@ -613,11 +630,11 @@ void finishWiFiConnect() {
     Serial.printf("%s is ready\n", LED_LIGHTS);
 }
 
-#define STRIP_STATUS "\"%s\": {\"on\": %s,\"rgb\": \"%d,%d,%d\",\"brightness\": %d,\"effect\": \"%s\"}"
+#define STRIP_STATUS "\"%s\": {\"on\": %s,\"rgb\": \"#%06X\",\"brightness\": %d,\"effect\": \"%s\"}"
 
 char *stripStatus(char *html, Strip *s) {
     snprintf(html, 127, STRIP_STATUS, s->name, s->on ? "true" : "false",
-             s->color.red, s->color.green, s->color.blue, s->brightness,
+             s->color.red << 16 | s->color.green << 8 | s->color.blue, s->brightness,
              s->pattern ? s->pattern->name : "solid");
     return html;
 }

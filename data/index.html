@@ -11,17 +11,9 @@
 
     <script>
         $(document).ready(function () {
-            let canvas = document.getElementById('picker');
-            let ctx = canvas.getContext('2d');
             let ws, lastHeard;
             let masterIp = null;
             let srSaved;
-
-            let image = new Image();
-            image.onload = function () {
-                ctx.drawImage(image, 0, 0, image.width, image.height);
-            };
-            image.src = "colorwheel.png";
 
             function process(d) {
                 $(document).prop('title', d.name.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
@@ -30,6 +22,8 @@
                 $('.switch input').prop('checked', b ? d.back.on : d.front.on);
                 $('#brightness').prop('value', b ? d.back.brightness : d.front.brightness);
                 $('#effect').prop('value', b ? d.back.effect : d.front.effect);
+                $('#color').css('background-color', b ? d.back.rgb : d.front.rgb);
+                $('#color').val(b ? d.back.rgb : d.front.rgb);
                 $('#version').html(d.version);
                 $('#error').html(d.isMaster ? '&nbsp;' : 'Controlled by ' + d.master.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
                 masterIp = !d.isMaster ? d.masterIp : null;
@@ -112,23 +106,6 @@
                 }
             });
 
-            $('#picker').click(function (e) {
-                let canvasOffset = $(canvas).offset();
-                let canvasX = Math.floor(e.pageX - canvasOffset.left);
-                let canvasY = Math.floor(e.pageY - canvasOffset.top);
-
-                let imageData = ctx.getImageData(canvasX, canvasY, 1, 1);
-                let pixel = imageData.data;
-                let pixelColor = pixel[0] + "," + pixel[1] + "," + pixel[2];
-                if (pixelColor === '0,0,0') {
-                    pixelColor = '255,255,255';
-                }
-                $('.preview').css('backgroundColor', pixelColor);
-
-                console.log('Color: ' + pixelColor);
-                send("/rgb", pixelColor);
-            });
-
             $('.switch input').click(function (e) {
                  let on = $('.switch input').prop('checked');
                  send("", on ? "on" : "off");
@@ -151,6 +128,13 @@
                 let f = this.value;
                 send("/effect", f);
                 console.log('Effect: ', f);
+            });
+
+            $('input[type=color]').change(function (e) {
+                let f = $(this).val();
+                $('#color').css('background-color', f);
+                send("/rgb", f);
+                console.log('RGB: ', f);
             });
 
             $('.sync input').change(function (e) {
@@ -321,11 +305,13 @@
             height: 25px;
             border-radius: 50%;
             background: #2196F3;
+            color: #0cff16;
             cursor: pointer;
         }
 
 
         .effectcontainer {
+            margin-top: 16px;
             position: relative;
             display: inline-block;
             border: 0px;
@@ -413,6 +399,18 @@
             transform: rotate(45deg);
         }
 
+        #icons {
+            margin: 32px 16px;
+        }
+
+        #color {
+            width: 32px;
+            height: 32px;
+            background-color: #f00;
+            border: 1px solid #ccc;
+            border-radius: 50%;
+            padding: 8px;
+        }
 
         #settings {
             margin: 48px 16px 16px 16px;
@@ -442,8 +440,6 @@
                 <span class="slider round"></span>
             </label>
         </div>
-        <p>
-        <canvas id="picker" var="1" width="290" height="290"></canvas>
         <p>
         <div class="brightnesscontainer">
             <input type="range" min="0" max="255" value="0" class="brightness" id="brightness">
@@ -482,6 +478,10 @@
                 <option value="solid">Solid Color</option>
                 <option value="test">Test Pattern</option>
             </select>
+        </div>
+        <p>
+        <div id="icons">
+            <input type="color" name="color" id="color" value="#ff0000">
         </div>
         <p>
         <div class="sync">
