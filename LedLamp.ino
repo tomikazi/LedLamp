@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.06.002"
+#define SW_VERSION      "2020.03.06.005"
 
 #define STATE      "/cfg/state"
 
@@ -25,6 +25,9 @@
 
 #define BUDDY_PORT  7001
 WiFiUDP buddy;
+
+#define PEER_PORT  7003
+WiFiUDP peer;
 
 #define GROUP_PORT  7002
 WiFiUDP group;
@@ -112,6 +115,7 @@ uint8_t master = 0;
 boolean syncWithMaster = true;
 boolean buddyAvailable = false;
 uint32_t buddyTimestamp = 0;
+uint32_t buddyIp = 0;
 
 boolean hadBuddyAndPeer = false;
 
@@ -147,7 +151,7 @@ uint32_t lastSample = 0;
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL);
-    gizmo.debugEnabled = true;
+//    gizmo.debugEnabled = true;
 
     gizmo.setCallback(mqttCallback);
     gizmo.addTopic("%s/sync");
@@ -229,6 +233,7 @@ void processColor(char *value, Strip *strip) {
         strip->color = colorFromCSV(value);
     }
     strip->pattern = findPattern("solid");
+    strip->randomMode = NOT_RANDOM;
 }
 
 void processBrightness(char *value, Strip *strip) {
@@ -345,10 +350,26 @@ void broadcastState() {
     wsServer.broadcastTXT(state);
 }
 
+void unicast(uint32_t ip, uint16_t port, Command command) {
+    peer.beginPacket(ip, port);
+    peer.write((char *) &command, sizeof(command));
+    peer.endPacket();
+}
+
 void broadcast(Command command) {
     group.beginPacketMulticast(groupIp, GROUP_PORT, WiFi.localIP());
     group.write((char *) &command, sizeof(command));
     group.endPacket();
+
+    if (buddyAvailable && buddyIp) {
+        unicast(buddyIp, PEER_PORT, command);
+    }
+
+    for (int i = 1; i < MAX_PEERS; i++) {
+        if (peers[i].ip && peers[i].lastHeard) {
+            unicast(peers[i].ip, PEER_PORT, command);
+        }
+    }
 }
 
 void requestSync() {
@@ -495,54 +516,68 @@ void prunePeers() {
     } else if (!peerCount && !buddyAvailable && hadBuddyAndPeer) {
         gizmo.debug("Restarting group");
         group.flush();
-        group.stop();
-        group.beginMulticast(WiFi.localIP(), groupIp, GROUP_PORT);
+//        group.stop();
+//        group.beginMulticast(WiFi.localIP(), groupIp, GROUP_PORT);
     }
 }
 
 void handlePeers() {
     EVERY_N_SECONDS(3)
     {
+        prunePeers();
         sayHello();
         requestSamples();
-        prunePeers();
     }
 
     Command command;
     while (group.parsePacket()) {
         int len = group.read((char *) &command, sizeof(command));
         if (len < 0) {
-            Serial.printf("Unable to read command!!!!\n");
+            gizmo.debug("Unable to read command!!!!");
+        } else {
+            handlePeer(command);
         }
+    }
 
-        if (command.src != (uint32_t) WiFi.localIP()) {
-            switch (command.op) {
-                case HELLO:
-                    addPeer(command.src, (char *) command.data);
-                    determineMaster();
-                    break;
-                case SYNC_REQ:
-                    syncColorSettings(&front);
-                    syncPattern(&front);
-                    syncColorSettings(&back);
-                    syncPattern(&back);
-                    break;
-                case PATTERN:
-                    copyPattern(command);
-                    break;
-                case COLORS:
-                    copyColorSettings(command);
-                    break;
-                case SAMPLE_ADV:
-                    if (!buddyAvailable) {
-                        gizmo.debug("Discovered buddy");
-                    }
-                    buddyAvailable = true;
-                    buddyTimestamp = millis() + PEER_TIMEOUT;
-                    break;
-                default:
-                    break;
-            }
+    while (peer.parsePacket()) {
+        int len = peer.read((char *) &command, sizeof(command));
+        if (len < 0) {
+            gizmo.debug("Unable to read command!!!!");
+        } else {
+            handlePeer(command);
+        }
+    }
+}
+
+void handlePeer(Command command) {
+    if (command.src != (uint32_t) WiFi.localIP()) {
+        switch (command.op) {
+            case HELLO:
+                addPeer(command.src, (char *) command.data);
+                determineMaster();
+                break;
+            case SYNC_REQ:
+                syncColorSettings(&front);
+                syncPattern(&front);
+                syncColorSettings(&back);
+                syncPattern(&back);
+                break;
+            case PATTERN:
+                copyPattern(command);
+                break;
+            case COLORS:
+                copyColorSettings(command);
+                break;
+            case SAMPLE_ADV:
+                if (!buddyAvailable) {
+                    gizmo.debug("Discovered buddy");
+                }
+                buddyIp = command.src;
+                buddyAvailable = true;
+                buddyTimestamp = millis() + PEER_TIMEOUT;
+                break;
+            default:
+                break;
         }
     }
 }
@@ -596,7 +631,7 @@ void handleLEDs(Strip *strip) {
     }
 }
 
-void handleRemoteMicData() {
+void handleSamples() {
     if (lastSample && lastSample < millis()) {
         lastSample = 0;
         samplepeak = 0;
@@ -619,7 +654,7 @@ void loop() {
     if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
         wsServer.loop();
         handlePeers();
-        handleRemoteMicData();
+        handleSamples();
     }
     handleLEDs(&front);
     handleLEDs(&back);
@@ -632,6 +667,7 @@ void finishWiFiConnect() {
     strcpy(peers[0].name, gizmo.getHostname());
 
     buddy.begin(BUDDY_PORT);
+    peer.begin(PEER_PORT);
     group.beginMulticast(WiFi.localIP(), groupIp, GROUP_PORT);
 
     determineMaster();
