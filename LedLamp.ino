@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.05.001"
+#define SW_VERSION      "2020.03.05.005"
 
 #define STATE      "/cfg/state"
 
@@ -99,12 +99,17 @@ typedef struct {
 
 #define PEER_TIMEOUT   10000
 
-#define MAX_LAMPS   4
-uint32_t peerIps[MAX_LAMPS];
-uint32_t peerTimes[MAX_LAMPS];
+#define MAX_PEERS   5
+typedef struct {
+    uint32_t ip;
+    uint32_t lastHeard;
+    char name[64];
+} Peer;
+
+Peer peers[MAX_PEERS];
+uint8_t master = 0;
 
 boolean syncWithMaster = true;
-uint32_t master = 0;
 boolean buddyAvailable = false;
 uint32_t buddyTimestamp = 0;
 
@@ -113,8 +118,11 @@ uint32_t buddyTimestamp = 0;
 #define ALL_CTX         FRONT_CTX | BACK_CTX
 
 #define HELLO           001
+
 #define SAMPLE_REQ      100
 #define SAMPLE_ADV      101
+
+#define SYNC_REQ        200
 #define PATTERN         201
 #define COLORS          202
 
@@ -123,7 +131,7 @@ typedef struct {
     uint32_t src;
     uint16_t ctx;
     uint16_t op;
-    uint8_t  data[MAX_CMD_DATA];
+    uint8_t data[MAX_CMD_DATA];
 } Command;
 
 // Sample average, max and peak detection
@@ -154,8 +162,6 @@ void setup() {
     gizmo.addTopic("%s/back/rgb");
     gizmo.addTopic("%s/back/brightness");
     gizmo.addTopic("%s/back/effect");
-
-    gizmo.httpServer()->on("/cmd", handleCommand);
 
     setupWebSocket();
 
@@ -262,6 +268,9 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
         syncWithMaster = !strcmp(value, "on");
         saveState();
         determineMaster();
+        if (syncWithMaster) {
+            requestSync();
+        }
 
     } else {
         gizmo.handleMQTTMessage(topic, value);
@@ -299,12 +308,20 @@ void handleWsCommand(char *cmd) {
     broadcastState();
 }
 
+#define STATUS \
+    "{%s,%s,\"master\": \"%s\",\"masterIp\": \"%s\",\"isMaster\": %s,\"hasPotentialMaster\": %s," \
+    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",\"version\":\"" SW_VERSION "\"}"
+
 void broadcastState() {
-    char state[512], f[128], b[128], m[128];
+    char state[512], f[128], b[128];
     state[0] = '\0';
-    snprintf(state, 511, "{%s,%s,%s,\"buddyAvailable\": %s,\"syncWithMaster\": %s,\"version\":\"" SW_VERSION "\"}",
-            stripStatus(f, &front), stripStatus(b, &back), masterStatus(m),
-            buddyAvailable ? "true" : "false", syncWithMaster ? "true" : "false");
+    snprintf(state, 511, STATUS, stripStatus(f, &front), stripStatus(b, &back),
+             peers[master].name, IPAddress(peers[master].ip).toString().c_str(),
+             isMaster(WiFi.localIP()) ? "true" : "false",
+             hasPotentialMaster() ? "true" : "false",
+             syncWithMaster ? "true" : "false",
+             buddyAvailable ? "true" : "false",
+             peers[0].name);
     wsServer.broadcastTXT(state);
 }
 
@@ -314,26 +331,32 @@ void broadcast(Command command) {
     group.endPacket();
 }
 
+void requestSync() {
+    broadcast({.src = peers[0].ip, .ctx = ALL_CTX, .op = SYNC_REQ, .data = {[0] = 0}});
+};
+
 void requestSamples() {
     boolean needSamples = (back.on && back.brightness && back.pattern && back.pattern->soundReactive) ||
                           (front.on && front.brightness && front.pattern && front.pattern->soundReactive);
-    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = SAMPLE_REQ, .data = { [0] = needSamples}});
+    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = SAMPLE_REQ, .data = {[0] = needSamples}});
 }
 
 void sayHello() {
-    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = HELLO, .data = { [0] = 0}});
+    Command cmd = {.src = peers[0].ip, .ctx = ALL_CTX, .op = HELLO, .data = {[0] = 0}};
+    strncat((char *) cmd.data, peers[0].name, MAX_CMD_DATA);
+    broadcast(cmd);
 }
 
 void syncPattern(Strip *s) {
     uint16_t ctx = s == &front ? FRONT_CTX : BACK_CTX;
-    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = PATTERN, .data = { [0] = 0}};
+    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = PATTERN, .data = {[0] = 0}};
     strncat((char *) cmd.data, s->pattern->name, MAX_CMD_DATA);
     broadcast(cmd);
 }
 
 void syncColorSettings(Strip *s) {
     uint16_t ctx = s == &front ? FRONT_CTX : BACK_CTX;
-    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = COLORS, .data = { [0] = 0}};
+    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = COLORS, .data = {[0] = 0}};
     cmd.data[0] = s->on;
     cmd.data[1] = s->hue;
     cmd.data[2] = s->brightness;
@@ -342,35 +365,42 @@ void syncColorSettings(Strip *s) {
     cmd.data[5] = s->color.raw[2];
 
     for (int i = 0, di = 6; i < 16; i++, di += 3) {
-        cmd.data[di+0] = s->targetPalette.entries[i].raw[0];
-        cmd.data[di+1] = s->targetPalette.entries[i].raw[1];
-        cmd.data[di+2] = s->targetPalette.entries[i].raw[2];
+        cmd.data[di + 0] = s->targetPalette.entries[i].raw[0];
+        cmd.data[di + 1] = s->targetPalette.entries[i].raw[1];
+        cmd.data[di + 2] = s->targetPalette.entries[i].raw[2];
     }
     broadcast(cmd);
 }
 
-void addPeer(uint32_t ip) {
-    int ai = -1;
-    for (int i = 0; i < MAX_LAMPS; i++) {
-        if (ip == peerIps[i]) {
-            peerTimes[i] = millis() + PEER_TIMEOUT;
+
+void debug(const char *msg) {
+    char line[512];
+    line[0] = '\0';
+    snprintf(line, 511, "%s: %s", gizmo.getHostname(), msg);
+    gizmo.publish("gizmo/console", line);
+}
+
+void addPeer(uint32_t ip, char *name) {
+    int ai = 0;
+    for (int i = 1; i < MAX_PEERS; i++) {
+        if (ip == peers[i].ip) {
+            peers[i].lastHeard = millis() + PEER_TIMEOUT;
             return;
-        }
-        if (ai < 0 && !peerIps[i]) {
+        } else if (!ai && !peers[i].ip) {
             ai = i;
         }
     }
-    if (ai >= 0) {
-        peerIps[ai] = ip;
-        peerTimes[ai] = millis() + PEER_TIMEOUT;
+    if (ai) {
+        peers[ai].ip = ip;
+        peers[ai].lastHeard = millis() + PEER_TIMEOUT;
+        strcpy(peers[ai].name, name);
         Serial.printf("Peer %s discovered\n", IPAddress(ip).toString().c_str());
     }
 }
 
 boolean hasPotentialMaster() {
-    uint32_t ip = (uint32_t) WiFi.localIP();
-    for (int i = 0; i < MAX_LAMPS; i++) {
-        if (peerIps[i] && ip > peerIps[i]) {
+    for (int i = 1; i < MAX_PEERS; i++) {
+        if (peers[i].ip && peers[0].ip > peers[i].ip) {
             return true;
         }
     }
@@ -378,25 +408,24 @@ boolean hasPotentialMaster() {
 }
 
 void determineMaster() {
-    uint32_t ip = (uint32_t) WiFi.localIP();
-    for (int i = 0; syncWithMaster && i < MAX_LAMPS; i++) {
-        if (peerIps[i] && ip > peerIps[i]) {
-            ip = peerIps[i];
+    master = 0;
+    for (int i = 1; syncWithMaster && i < MAX_PEERS; i++) {
+        if (peers[i].ip && peers[master].ip > peers[i].ip) {
+            master = i;
         }
     }
-    master = ip;
 }
 
 boolean isMaster(IPAddress ip) {
-    return master == (uint32_t) ip;
+    return peers[master].ip == (uint32_t) ip;
 }
 
 void copyPattern(Command command) {
     if (isMaster(command.src)) {
         if (command.ctx == FRONT_CTX) {
-            front.pattern = findPattern((char *)command.data);
+            front.pattern = findPattern((char *) command.data);
         } else if (command.ctx == BACK_CTX) {
-            back.pattern = findPattern((char *)command.data);
+            back.pattern = findPattern((char *) command.data);
         }
     }
 }
@@ -409,9 +438,9 @@ void copyStripColorSettings(Strip *s, Command cmd) {
     s->color.raw[1] = cmd.data[4];
     s->color.raw[2] = cmd.data[5];
     for (int i = 0, di = 6; i < 16; i++, di += 3) {
-        s->targetPalette.entries[i].raw[0] = cmd.data[di+0];
-        s->targetPalette.entries[i].raw[1] = cmd.data[di+1];
-        s->targetPalette.entries[i].raw[2] = cmd.data[di+2];
+        s->targetPalette.entries[i].raw[0] = cmd.data[di + 0];
+        s->targetPalette.entries[i].raw[1] = cmd.data[di + 1];
+        s->targetPalette.entries[i].raw[2] = cmd.data[di + 2];
     }
 }
 
@@ -427,10 +456,16 @@ void copyColorSettings(Command command) {
 
 void prunePeers() {
     uint32_t now = millis();
-    for (int i = 0; i < MAX_LAMPS; i++) {
-        if (peerIps[i] && peerTimes[i] < now) {
-            peerIps[i] = 0;
-            peerTimes[i] = 0;
+    uint8_t peerCount = 0;
+    for (int i = 1; i < MAX_PEERS; i++) {
+        Peer peer = peers[i];
+        if (peer.ip && peer.lastHeard < now) {
+            peer.ip = 0;
+            peer.lastHeard = 0;
+            debug("deleted peer");
+
+        } else {
+            peerCount++;
         }
     }
     determineMaster();
@@ -438,11 +473,13 @@ void prunePeers() {
     if (buddyTimestamp && buddyTimestamp < millis()) {
         buddyAvailable = false;
         buddyTimestamp = 0;
+        debug("deleted buddy");
     }
 }
 
 void handlePeers() {
-    EVERY_N_SECONDS(3) {
+    EVERY_N_SECONDS(3)
+    {
         sayHello();
         requestSamples();
         prunePeers();
@@ -458,8 +495,15 @@ void handlePeers() {
         if (command.src != (uint32_t) WiFi.localIP()) {
             switch (command.op) {
                 case HELLO:
-                    addPeer(command.src);
+                    addPeer(command.src, (char *) command.data);
+                    debug("refreshed peer");
                     determineMaster();
+                    break;
+                case SYNC_REQ:
+                    syncColorSettings(&front);
+                    syncPattern(&front);
+                    syncColorSettings(&back);
+                    syncPattern(&back);
                     break;
                 case PATTERN:
                     copyPattern(command);
@@ -470,6 +514,7 @@ void handlePeers() {
                 case SAMPLE_ADV:
                     buddyAvailable = true;
                     buddyTimestamp = millis() + PEER_TIMEOUT;
+                    debug("refreshed buddy");
                     break;
                 default:
                     break;
@@ -559,6 +604,9 @@ void loop() {
 void finishWiFiConnect() {
     loadState();
 
+    peers[0].ip = (uint32_t) WiFi.localIP();
+    strcpy(peers[0].name, gizmo.getHostname());
+
     buddy.begin(BUDDY_PORT);
     group.beginMulticast(WiFi.localIP(), groupIp, GROUP_PORT);
 
@@ -576,38 +624,6 @@ char *stripStatus(char *html, Strip *s) {
              s->color.red, s->color.green, s->color.blue, s->brightness,
              s->pattern ? s->pattern->name : "solid");
     return html;
-}
-
-#define MASTER_STATUS "\"hasPotentialMaster\": %s,\"masterIp\": \"%s\",\"isMaster\": %s"
-
-char *masterStatus(char *html) {
-    snprintf(html, 127, MASTER_STATUS, hasPotentialMaster() ? "true" : "false",
-            IPAddress(master).toString().c_str(),
-            isMaster(WiFi.localIP()) ? "true" : "false");
-    return html;
-}
-
-void handleCommand() {
-    char t[64], m[64];
-    strncpy(t, gizmo.httpServer()->arg("t").c_str(), 63);
-    strncpy(m, gizmo.httpServer()->arg("m").c_str(), 63);
-    if (strcmp(t, "get")) {
-        mqttCallback(t, (uint8_t *) m, strlen(m));
-    }
-
-    static char f[128];
-    static char b[128];
-    static char a[128];
-
-    gizmo.httpServer()->setContentLength(CONTENT_LENGTH_UNKNOWN);
-    gizmo.httpServer()->send(200, "application/json", "{");
-    gizmo.httpServer()->sendContent(stripStatus(f, &front));
-    gizmo.httpServer()->sendContent(",");
-    gizmo.httpServer()->sendContent(stripStatus(b, &back));
-    gizmo.httpServer()->sendContent(",");
-    gizmo.httpServer()->sendContent(masterStatus(a));
-    gizmo.httpServer()->sendContent(",\"version\":\"" SW_VERSION "\"");
-    gizmo.httpServer()->sendContent("}");
 }
 
 void loadState() {

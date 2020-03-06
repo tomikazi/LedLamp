@@ -24,12 +24,14 @@
             image.src = "colorwheel.png";
 
             function process(d) {
+                $(document).prop('title', d.name.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
+
                 let b = $('.led-selector #back').prop('checked');
                 $('.switch input').prop('checked', b ? d.back.on : d.front.on);
                 $('#brightness').prop('value', b ? d.back.brightness : d.front.brightness);
                 $('#effect').prop('value', b ? d.back.effect : d.front.effect);
                 $('#version').html(d.version);
-                $('#error').html(d.isMaster ? '&nbsp;' : 'Controlled by ' + d.masterIp);
+                $('#error').html(d.isMaster ? '&nbsp;' : 'Controlled by ' + d.master.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
                 masterIp = !d.isMaster ? d.masterIp : null;
 
                 if (d.buddyAvailable) {
