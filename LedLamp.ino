@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.05.005"
+#define SW_VERSION      "2020.03.05.006"
 
 #define STATE      "/cfg/state"
 
@@ -97,7 +97,7 @@ typedef struct {
     uint16_t oldsample;
 } MicSample;
 
-#define PEER_TIMEOUT   10000
+#define PEER_TIMEOUT   20000
 
 #define MAX_PEERS   5
 typedef struct {
@@ -373,13 +373,6 @@ void syncColorSettings(Strip *s) {
 }
 
 
-void debug(const char *msg) {
-    char line[512];
-    line[0] = '\0';
-    snprintf(line, 511, "%s: %s", gizmo.getHostname(), msg);
-    gizmo.publish("gizmo/console", line);
-}
-
 void addPeer(uint32_t ip, char *name) {
     int ai = 0;
     for (int i = 1; i < MAX_PEERS; i++) {
@@ -395,6 +388,7 @@ void addPeer(uint32_t ip, char *name) {
         peers[ai].lastHeard = millis() + PEER_TIMEOUT;
         strcpy(peers[ai].name, name);
         Serial.printf("Peer %s discovered\n", IPAddress(ip).toString().c_str());
+        gizmo.debug("refreshed peer");
     }
 }
 
@@ -458,11 +452,10 @@ void prunePeers() {
     uint32_t now = millis();
     uint8_t peerCount = 0;
     for (int i = 1; i < MAX_PEERS; i++) {
-        Peer peer = peers[i];
-        if (peer.ip && peer.lastHeard < now) {
-            peer.ip = 0;
-            peer.lastHeard = 0;
-            debug("deleted peer");
+        if (peers[i].ip && peers[i].lastHeard < now) {
+            peers[i].ip = 0;
+            peers[i].lastHeard = 0;
+            gizmo.debug("deleted peer");
 
         } else {
             peerCount++;
@@ -473,7 +466,7 @@ void prunePeers() {
     if (buddyTimestamp && buddyTimestamp < millis()) {
         buddyAvailable = false;
         buddyTimestamp = 0;
-        debug("deleted buddy");
+        gizmo.debug("deleted buddy");
     }
 }
 
@@ -496,8 +489,8 @@ void handlePeers() {
             switch (command.op) {
                 case HELLO:
                     addPeer(command.src, (char *) command.data);
-                    debug("refreshed peer");
                     determineMaster();
+                    gizmo.debug("got hello");
                     break;
                 case SYNC_REQ:
                     syncColorSettings(&front);
@@ -512,9 +505,12 @@ void handlePeers() {
                     copyColorSettings(command);
                     break;
                 case SAMPLE_ADV:
+                    gizmo.debug("got advertisement");
+                    if (!buddyAvailable) {
+                        gizmo.debug("refreshed buddy");
+                    }
                     buddyAvailable = true;
                     buddyTimestamp = millis() + PEER_TIMEOUT;
-                    debug("refreshed buddy");
                     break;
                 default:
                     break;
