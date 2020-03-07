@@ -343,13 +343,20 @@
             margin: 32px 16px;
         }
 
+        #pallette {
+            display: inline-block;
+            margin: 0px 16px;
+        }
+
         #color {
+            position: relative;
             width: 32px;
             height: 32px;
             background-color: #f00;
             border: 2px solid #777;
             border-radius: 50%;
             padding: 8px;
+            top: -20px;
         }
 
         .toggle {
@@ -363,7 +370,7 @@
         }
 
         #sync {
-            background-color: #2196F3;
+            background-color: #333;
             background-image: url('sync.png');
             background-repeat: no-repeat, repeat;
             background-position: 7px 6px;
@@ -447,11 +454,9 @@
             </select>
         </div>
         <p>
-        <div id="pallette">
-            <input type="color" name="color" id="color" value="#ff0000"/>
-        </div>
         <div id="icons">
             <div id="sync" class="toggle"></div>
+            <div id="pallette"><input type="color" name="color" id="color" value="#ff0000"/></div>
             <div id="sleep" class="toggle"></div>
         </div>
         <p>
