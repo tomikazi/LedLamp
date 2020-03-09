@@ -31,6 +31,7 @@
 
                 if (d.hasOwnProperty('favs')) {
                     favs = d.favs;
+                    console.log('Got new favs!', favs);
                     $('#effect > option').each(function () {
                         let v = $(this).html().replace(/^[^\w]*/, '');
                         $(this).html((favs.hasOwnProperty($(this).val()) ? '&#9733 ' : '&#8199&#8198&#8198&#8198 ') + v);
@@ -38,7 +39,7 @@
                 }
 
                 let isFav = favs[b ? d.back.effect : d.front.effect];
-                $('#fav').css('background-color', isFav ? '#2196F3' : '#222').show();
+                $('#fav').css('background-color', isFav ? '#2196F3' : '#222');
 
                 if (d.hasPotentialMaster) {
                     synced = d.syncWithMaster;
@@ -153,7 +154,12 @@
 
             $('#fav').click(function (e) {
                 send("/fav", "toggle");
-                console.log('Sync: ', !synced);
+                let o = $('#effect option:selected').first();
+                let f = !favs.hasOwnProperty(o.val());
+                let v = o.html().replace(/^[^\w]*/, '');
+                o.html((f ? '&#9733 ' : '&#8199&#8198&#8198&#8198 ') + v);
+                $('#fav').css('background-color', f ? '#2196F3' : '#222');
+                console.log('Fav: ', f);
             });
 
             $('.led-selector input').change(function (e) {

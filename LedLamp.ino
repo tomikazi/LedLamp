@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.09.002"
+#define SW_VERSION      "2020.03.09.005"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -59,6 +59,8 @@ typedef enum {
     SOUND_REACTIVE,
     NOT_SOUND_REACTIVE
 } RandomMode;
+
+uint8_t favCount = 0;
 
 struct StripRec {
     const char *name;
@@ -341,7 +343,7 @@ void handleWsCommand(char *cmd) {
     if (strcmp(t, "get")) {
         mqttCallback(t, (uint8_t *) m, strlen(m));
     }
-    broadcastState(!strcmp(m, "all") || !strcmp(t, "/fav"));
+    broadcastState(!strcmp(m, "all") || strstr(t, "/fav"));
 }
 
 #define STATUS \
@@ -828,14 +830,13 @@ Pattern *findPattern(const char *name) {
 Pattern *randomPattern(Strip *s) {
     Pattern *old = s->pattern;
     Pattern *p;
-    int c = 256;
+    RandomMode mode = s->randomMode == FAVORITES && favCount == 0 ? ALL : s->randomMode;
     do {
         p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
-        c--;
-    } while (c > 0 && (p == old ||
-             (s->randomMode == FAVORITES && !p->favorite) ||
-             (s->randomMode == SOUND_REACTIVE && !p->soundReactive) ||
-             (s->randomMode == NOT_SOUND_REACTIVE && p->soundReactive)));
+    } while (p == old ||
+             (mode == FAVORITES && !p->favorite) ||
+             (mode == SOUND_REACTIVE && !p->soundReactive) ||
+             (mode == NOT_SOUND_REACTIVE && p->soundReactive));
     return p;
 }
 
@@ -862,6 +863,7 @@ void loadFavorites() {
     Serial.printf("Loading favorites...\n");
     char name[32];
     File f = SPIFFS.open(FAVS, "r");
+    favCount = 0;
     if (f) {
         while (f.available()) {
             int l = f.readBytesUntil('\n', name, 31);
@@ -869,6 +871,7 @@ void loadFavorites() {
             Pattern *p = findPattern(name);
             if (p) {
                 p->favorite = true;
+                favCount++;
             }
         }
         f.close();
@@ -878,11 +881,13 @@ void loadFavorites() {
 void saveFavorites() {
     Serial.printf("Saving favorites...\n");
     File f = SPIFFS.open(FAVS, "w");
+    favCount = 0;
     if (f) {
         int i = 0;
         while (strcmp(patterns[i].name, "test")) {
             if (patterns[i].favorite) {
                 f.printf("%s\n", patterns[i].name);
+                favCount++;
             }
             i++;
         }
