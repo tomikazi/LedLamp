@@ -13,6 +13,7 @@
             let ws, lastHeard;
             let masterIp = null;
             let synced;
+            let favs = {};
 
             function process(d) {
                 let name = d.name.replace(/([A-Z]+)/g, ' $1').replace(/^ /, '');
@@ -28,12 +29,15 @@
                 $('#error').html(d.isMaster ? '&nbsp;' : 'Controlled by ' + d.master.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
                 masterIp = !d.isMaster ? d.masterIp : null;
 
-                $('#effect > option').each(function () {
-                    let v = $(this).html().replace(/^[^\w]*/, '');
-                    $(this).html((d.favs.hasOwnProperty($(this).val()) ? '&#9733 ' : '&#8199&#8198&#8198&#8198 ') + v);
-                });
+                if (d.hasOwnProperty('favs')) {
+                    favs = d.favs;
+                    $('#effect > option').each(function () {
+                        let v = $(this).html().replace(/^[^\w]*/, '');
+                        $(this).html((favs.hasOwnProperty($(this).val()) ? '&#9733 ' : '&#8199&#8198&#8198&#8198 ') + v);
+                    });
+                }
 
-                let isFav = d.favs[b ? d.back.effect : d.front.effect];
+                let isFav = favs[b ? d.back.effect : d.front.effect];
                 $('#fav').css('background-color', isFav ? '#2196F3' : '#222').show();
 
                 if (d.hasPotentialMaster) {
@@ -66,7 +70,7 @@
                 ws.onopen = function () {
                     console.log('WebSocket connected');
                     markLive(true);
-                    send("get", "status");
+                    send("get", "all");
                 };
 
                 ws.onerror = function (error) {

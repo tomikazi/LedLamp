@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.08.004"
+#define SW_VERSION      "2020.03.09.002"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -341,23 +341,29 @@ void handleWsCommand(char *cmd) {
     if (strcmp(t, "get")) {
         mqttCallback(t, (uint8_t *) m, strlen(m));
     }
-    broadcastState();
+    broadcastState(!strcmp(m, "all") || !strcmp(t, "/fav"));
 }
 
 #define STATUS \
     "{%s,%s,\"master\": \"%s\",\"masterIp\": \"%s\",\"isMaster\": %s,\"hasPotentialMaster\": %s," \
-    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",\"favs\": {%s},\"version\":\"" SW_VERSION "\"}"
+    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",%s\"version\":\"" SW_VERSION "\"}"
 
-void broadcastState() {
+void broadcastState(boolean all) {
     char state[1024], f[128], b[128], favs[512];
     state[0] = '\0';
+    favs[0] = '\0';
+
+    if (all) {
+        favorites(favs);
+    }
+
     snprintf(state, 1023, STATUS, stripStatus(f, &front), stripStatus(b, &back),
              peers[master].name, IPAddress(peers[master].ip).toString().c_str(),
              isMaster(WiFi.localIP()) ? "true" : "false",
              hasPotentialMaster() ? "true" : "false",
              syncWithMaster ? "true" : "false",
              buddyAvailable ? "true" : "false",
-             peers[0].name, favorites(favs));
+             peers[0].name, favs);
     wsServer.broadcastTXT(state);
 }
 
@@ -836,15 +842,19 @@ Pattern *randomPattern(Strip *s) {
 char *favorites(char *favs) {
     char fav[32];
     favs[0] = '\0';
+    strncat(favs, "\"favs\": {", 16);
     int i = 0;
+    boolean first = true;
     while (strcmp(patterns[i].name, "test")) {
         if (patterns[i].favorite) {
             fav[0] = '\0';
-            snprintf(fav, 31, "%s\"%s\":1", favs[0] ? "," : "", patterns[i].name);
+            snprintf(fav, 24, "%s\"%s\":1", !first ? "," : "", patterns[i].name);
             strncat(favs, fav, 31);
+            first = false;
         }
         i++;
     }
+    strncat(favs, "},", 16);
     return favs;
 }
 
