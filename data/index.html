@@ -5,7 +5,6 @@
     <link rel="apple-touch-icon" href="app.png">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 
-
     <script src="jquery.js"></script>
     <title>LED Lamp</title>
 
@@ -13,7 +12,7 @@
         $(document).ready(function () {
             let ws, lastHeard;
             let masterIp = null;
-            let srSaved, synced;
+            let synced;
 
             function process(d) {
                 let name = d.name.replace(/([A-Z]+)/g, ' $1').replace(/^ /, '');
@@ -29,11 +28,13 @@
                 $('#error').html(d.isMaster ? '&nbsp;' : 'Controlled by ' + d.master.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
                 masterIp = !d.isMaster ? d.masterIp : null;
 
-                // if (d.buddyAvailable) {
-                //     $('#effect option').eq(1).after(srSaved);
-                // } else {
-                //     srSaved = $("#effect option[value*='sr_']").detach();
-                // }
+                $('#effect > option').each(function () {
+                    let v = $(this).html().replace(/^[^\w]*/, '');
+                    $(this).html((d.favs.hasOwnProperty($(this).val()) ? '&#9733 ' : '&#8199&#8198&#8198&#8198 ') + v);
+                });
+
+                let isFav = d.favs[b ? d.back.effect : d.front.effect];
+                $('#fav').css('background-color', isFav ? '#2196F3' : '#222').show();
 
                 if (d.hasPotentialMaster) {
                     synced = d.syncWithMaster;
@@ -143,6 +144,11 @@
                 if (ws && ws.readyState === 1) {
                     ws.send("/sync&" + (!synced ? 'on' : 'off'));
                 }
+                console.log('Sync: ', !synced);
+            });
+
+            $('#fav').click(function (e) {
+                send("/fav", "toggle");
                 console.log('Sync: ', !synced);
             });
 
@@ -383,6 +389,13 @@
             background-position: 7px 6px;
         }
 
+        #fav {
+            background-color: #333;
+            background-image: url('fav.png');
+            background-repeat: no-repeat, repeat;
+            background-position: 6px 4px;
+        }
+
         #settings {
             margin: 48px 16px 16px 16px;
         }
@@ -421,8 +434,8 @@
         <p>
         <div class="effectcontainer">
             <select id="effect">
-                <option value="none" selected>-- Select Effect --</option>
                 <option value="random">All Effects</option>
+                <option value="fav_random">All Favorites &#9733</option>
                 <option value="sr_random">All Sound Reactive Effects &#9836</option>
                 <option value="nsr_random">All Non-Sound Reactive Effects</option>
                 <option value="sr_pixel">Pixel &#9836</option>
@@ -455,10 +468,11 @@
         </div>
         <p>
         <div id="icons">
-            <div id="sync" class="toggle"></div>
-            <div id="pallette"><input type="color" name="color" id="color" value="#ff0000"/></div>
-            <div id="sleep" class="toggle"></div>
-        </div>
+        <div id="fav" class="toggle"></div>
+        <div id="pallette"><input type="color" name="color" id="color" value="#ff0000"/></div>
+        <div id="sleep" class="toggle"></div>
+        <div id="sync" class="toggle"></div>
+    </div>
         <p>
         <div id="settings"><a href="/nets" border="0"><img src="gears.png"/></a></div>
         <div id="version">2019.05.15.001</div>

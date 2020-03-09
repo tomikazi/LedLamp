@@ -8,9 +8,10 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.07.001"
+#define SW_VERSION      "2020.03.08.004"
 
 #define STATE      "/cfg/state"
+#define FAVS       "/cfg/favs"
 
 #define FRONT_PIN       4
 #define BACK_PIN        5
@@ -48,11 +49,13 @@ typedef struct Pattern {
     uint32_t huePause;
     uint32_t renderPause;
     boolean soundReactive;
+    boolean favorite;
 } Pattern;
 
 typedef enum {
     NOT_RANDOM,
     ALL,
+    FAVORITES,
     SOUND_REACTIVE,
     NOT_SOUND_REACTIVE
 } RandomMode;
@@ -204,11 +207,11 @@ CRGB colorFromCSS(char *css) {
     char tmp[32];
     strncpy(tmp, css, 32);
     uint8_t r, g, b;
-    b = strtol(tmp+5, NULL, 16);
+    b = strtol(tmp + 5, NULL, 16);
     tmp[5] = '\0';
-    g = strtol(tmp+3, NULL, 16);
+    g = strtol(tmp + 3, NULL, 16);
     tmp[3] = '\0';
-    r = strtol(tmp+1, NULL, 16);
+    r = strtol(tmp + 1, NULL, 16);
     return CRGB(r, g, b);
 }
 
@@ -243,6 +246,7 @@ void processBrightness(char *value, Strip *strip) {
 
 RandomMode randomMode(const char *name) {
     return !strcmp(name, "random") ? ALL :
+           !strcmp(name, "fav_random") ? FAVORITES :
            !strcmp(name, "sr_random") ? SOUND_REACTIVE :
            !strcmp(name, "nsr_random") ? NOT_SOUND_REACTIVE : NOT_RANDOM;
 }
@@ -264,6 +268,13 @@ void processCallback(char *topic, char *value, Strip *strip) {
         processBrightness(value, strip);
     } else if (strstr(topic, "/effect")) {
         processEffect(value, strip);
+    } else if (strstr(topic, "/fav")) {
+        strip->pattern->favorite = !strip->pattern->favorite;
+        saveFavorites();
+        if (!strip->pattern->favorite) {
+            strip->pattern = randomPattern(strip);
+        }
+
     } else {
         processOnOff(value, strip);
     }
@@ -335,18 +346,18 @@ void handleWsCommand(char *cmd) {
 
 #define STATUS \
     "{%s,%s,\"master\": \"%s\",\"masterIp\": \"%s\",\"isMaster\": %s,\"hasPotentialMaster\": %s," \
-    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",\"version\":\"" SW_VERSION "\"}"
+    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",\"favs\": {%s},\"version\":\"" SW_VERSION "\"}"
 
 void broadcastState() {
-    char state[512], f[128], b[128];
+    char state[1024], f[128], b[128], favs[512];
     state[0] = '\0';
-    snprintf(state, 511, STATUS, stripStatus(f, &front), stripStatus(b, &back),
+    snprintf(state, 1023, STATUS, stripStatus(f, &front), stripStatus(b, &back),
              peers[master].name, IPAddress(peers[master].ip).toString().c_str(),
              isMaster(WiFi.localIP()) ? "true" : "false",
              hasPotentialMaster() ? "true" : "false",
              syncWithMaster ? "true" : "false",
              buddyAvailable ? "true" : "false",
-             peers[0].name);
+             peers[0].name, favorites(favs));
     wsServer.broadcastTXT(state);
 }
 
@@ -662,6 +673,7 @@ void loop() {
 
 void finishWiFiConnect() {
     loadState();
+    loadFavorites();
 
     peers[0].ip = (uint32_t) WiFi.localIP();
     strcpy(peers[0].name, gizmo.getHostname());
@@ -728,6 +740,7 @@ void loadStripState(File f, Strip *s) {
 
 const char *effect(Strip *s) {
     return s->randomMode == ALL ? "random" :
+           s->randomMode == FAVORITES ? "fav_random" :
            s->randomMode == SOUND_REACTIVE ? "sr_random" :
            s->randomMode == NOT_SOUND_REACTIVE ? "nsr_random" :
            s->pattern ? s->pattern->name : "solid";
@@ -762,38 +775,38 @@ void saveState() {
 #include "noisepal.h"
 #include "besin.h"
 #include "fillnoise.h"
-#include "plasmasr.h"
+#include "plasmasr.h"0
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
-        Pattern{.name = "glitter", .renderer = glitter, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "confetti", .renderer = confetti, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "rainbow", .renderer = rainbow, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "rainbowg", .renderer = rainbowWithGlitter, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false},
+        Pattern{.name = "glitter", .renderer = glitter, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "confetti", .renderer = confetti, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "rainbow", .renderer = rainbow, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "rainbowg", .renderer = rainbowWithGlitter, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
 
-        Pattern{.name = "sr_pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true},
-        Pattern{.name = "sr_pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true},
-        Pattern{.name = "sr_ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20, .soundReactive = true},
-        Pattern{.name = "sr_matrix", .renderer = matrix, .huePause = 2000, .renderPause = 40, .soundReactive = true},
-        Pattern{.name = "sr_onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30, .soundReactive = true},
-        Pattern{.name = "sr_noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0, .soundReactive = true},
-        Pattern{.name = "sr_noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0, .soundReactive = true},
-        Pattern{.name = "sr_rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10, .soundReactive = true},
-        Pattern{.name = "sr_besin", .renderer = besin, .huePause = 2000, .renderPause = 20, .soundReactive = true},
-        Pattern{.name = "sr_fillnoise", .renderer = fillnoise, .huePause = 2000, .renderPause = 20, .soundReactive = true},
-        Pattern{.name = "sr_plasma", .renderer = plasmasr, .huePause = 2000, .renderPause = 10, .soundReactive = true},
+        Pattern{.name = "sr_pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_matrix", .renderer = matrix, .huePause = 2000, .renderPause = 40, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_besin", .renderer = besin, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_fillnoise", .renderer = fillnoise, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_plasma", .renderer = plasmasr, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = false},
 
-        Pattern{.name = "solid", .renderer = solid, .huePause = 2000, .renderPause = 20, .soundReactive = false},
-        Pattern{.name = "test", .renderer = test, .huePause = 20, .renderPause = 20, .soundReactive = false}
+        Pattern{.name = "solid", .renderer = solid, .huePause = 2000, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "test", .renderer = test, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false}
 };
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
@@ -809,10 +822,60 @@ Pattern *findPattern(const char *name) {
 Pattern *randomPattern(Strip *s) {
     Pattern *old = s->pattern;
     Pattern *p;
+    int c = 256;
     do {
         p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
-    } while (p == old ||
+        c--;
+    } while (c > 0 && (p == old ||
+             (s->randomMode == FAVORITES && !p->favorite) ||
              (s->randomMode == SOUND_REACTIVE && !p->soundReactive) ||
-             (s->randomMode == NOT_SOUND_REACTIVE && p->soundReactive));
+             (s->randomMode == NOT_SOUND_REACTIVE && p->soundReactive)));
     return p;
+}
+
+char *favorites(char *favs) {
+    char fav[32];
+    favs[0] = '\0';
+    int i = 0;
+    while (strcmp(patterns[i].name, "test")) {
+        if (patterns[i].favorite) {
+            fav[0] = '\0';
+            snprintf(fav, 31, "%s\"%s\":1", favs[0] ? "," : "", patterns[i].name);
+            strncat(favs, fav, 31);
+        }
+        i++;
+    }
+    return favs;
+}
+
+void loadFavorites() {
+    Serial.printf("Loading favorites...\n");
+    char name[32];
+    File f = SPIFFS.open(FAVS, "r");
+    if (f) {
+        while (f.available()) {
+            int l = f.readBytesUntil('\n', name, 31);
+            name[l] = 0;
+            Pattern *p = findPattern(name);
+            if (p) {
+                p->favorite = true;
+            }
+        }
+        f.close();
+    }
+}
+
+void saveFavorites() {
+    Serial.printf("Saving favorites...\n");
+    File f = SPIFFS.open(FAVS, "w");
+    if (f) {
+        int i = 0;
+        while (strcmp(patterns[i].name, "test")) {
+            if (patterns[i].favorite) {
+                f.printf("%s\n", patterns[i].name);
+            }
+            i++;
+        }
+        f.close();
+    }
 }
