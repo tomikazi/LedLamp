@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.09.008"
+#define SW_VERSION      "2020.03.09.009"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -129,6 +129,7 @@ boolean hadBuddyAndPeer = false;
 #define ALL_CTX         FRONT_CTX | BACK_CTX
 
 #define HELLO           001
+#define SLEEP           002
 
 #define SAMPLE_REQ      100
 #define SAMPLE_ADV      101
@@ -153,9 +154,9 @@ uint16_t oldsample = 0;
 #define SAMPLE_TIMEOUT  1000
 uint32_t lastSample = 0;
 
-
 #define SLEEP_TIMEOUT   30*60000
 uint32_t sleepTime = 0;
+uint32_t sleepDimmer = 100;
 
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
@@ -590,6 +591,9 @@ void handlePeer(Command command) {
                 addPeer(command.src, (char *) command.data);
                 determineMaster();
                 break;
+            case SLEEP:
+                sleepDimmer = (uint32_t) command.data[0];
+                break;
             case SYNC_REQ:
                 syncColorSettings(&front);
                 syncPattern(&front);
@@ -632,7 +636,7 @@ void handleLEDs(Strip *strip) {
 
         EVERY_X_MILLIS(strip->t1, strip->pattern->renderPause)
             strip->pattern->renderer(strip);
-            strip->ctl->showLeds(strip->brightness);
+            strip->ctl->showLeds(sleepDimmer < 100 ? (uint8_t) ((sleepDimmer * strip->brightness)/100) : strip->brightness);
         }
     } else {
         fill_solid(strip->leds, LED_COUNT, strip->color);
@@ -672,6 +676,12 @@ void handleSleep() {
         back.on = false;
         syncColorSettings(&back);
         sleepTime = 0;
+        sleepDimmer = 100;
+        broadcast({.src = peers[0].ip, .ctx = ALL_CTX, .op = SLEEP, .data = {[0] = (uint8_t) sleepDimmer}});
+
+    } else if (sleepTime && (sleepTime - millis()) < 60000) {
+        sleepDimmer = (sleepTime - millis())/600;
+        broadcast({.src = peers[0].ip, .ctx = ALL_CTX, .op = SLEEP, .data = {[0] = (uint8_t) sleepDimmer}});
     }
 }
 
