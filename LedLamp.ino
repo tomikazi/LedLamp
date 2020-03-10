@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.09.005"
+#define SW_VERSION      "2020.03.09.006"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -155,7 +155,7 @@ uint32_t lastSample = 0;
 
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
-    gizmo.setUpdateURL(SW_UPDATE_URL);
+    gizmo.setUpdateURL(SW_UPDATE_URL, onUpdate);
 //    gizmo.debugEnabled = true;
 
     gizmo.setCallback(mqttCallback);
@@ -367,6 +367,13 @@ void broadcastState(boolean all) {
              buddyAvailable ? "true" : "false",
              peers[0].name, favs);
     wsServer.broadcastTXT(state);
+}
+
+void onUpdate() {
+    // Suppress samples and switch to glitter
+    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = SAMPLE_REQ, .data = {[0] = 0}});
+    processEffect((char *) "plasma", &front);
+    processEffect((char *) "cycle", &back);
 }
 
 void unicast(uint32_t ip, uint16_t port, Command command) {
