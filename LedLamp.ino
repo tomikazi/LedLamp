@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.09.009"
+#define SW_VERSION      "2020.03.09.010"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -129,7 +129,6 @@ boolean hadBuddyAndPeer = false;
 #define ALL_CTX         FRONT_CTX | BACK_CTX
 
 #define HELLO           001
-#define SLEEP           002
 
 #define SAMPLE_REQ      100
 #define SAMPLE_ADV      101
@@ -445,6 +444,8 @@ void syncColorSettings(Strip *s) {
         cmd.data[di + 1] = s->targetPalette.entries[i].raw[1];
         cmd.data[di + 2] = s->targetPalette.entries[i].raw[2];
     }
+
+    cmd.data[32] = (uint8_t) sleepDimmer;
     broadcast(cmd);
 }
 
@@ -511,6 +512,7 @@ void copyStripColorSettings(Strip *s, Command cmd) {
         s->targetPalette.entries[i].raw[1] = cmd.data[di + 1];
         s->targetPalette.entries[i].raw[2] = cmd.data[di + 2];
     }
+    sleepDimmer = (uint32_t) cmd.data[32];
 }
 
 void copyColorSettings(Command command) {
@@ -590,9 +592,6 @@ void handlePeer(Command command) {
             case HELLO:
                 addPeer(command.src, (char *) command.data);
                 determineMaster();
-                break;
-            case SLEEP:
-                sleepDimmer = (uint32_t) command.data[0];
                 break;
             case SYNC_REQ:
                 syncColorSettings(&front);
@@ -677,11 +676,9 @@ void handleSleep() {
         syncColorSettings(&back);
         sleepTime = 0;
         sleepDimmer = 100;
-        broadcast({.src = peers[0].ip, .ctx = ALL_CTX, .op = SLEEP, .data = {[0] = (uint8_t) sleepDimmer}});
 
     } else if (sleepTime && (sleepTime - millis()) < 60000) {
         sleepDimmer = (sleepTime - millis())/600;
-        broadcast({.src = peers[0].ip, .ctx = ALL_CTX, .op = SLEEP, .data = {[0] = (uint8_t) sleepDimmer}});
     }
 }
 
