@@ -12,7 +12,7 @@
         $(document).ready(function () {
             let ws, lastHeard;
             let masterIp = null;
-            let synced;
+            let synced, sleep;
             let favs = {};
 
             function process(d) {
@@ -26,8 +26,9 @@
                 $('#effect').prop('value', b ? d.back.effect : d.front.effect);
                 $('#color').css('background-color', b ? d.back.rgb : d.front.rgb).val(b ? d.back.rgb : d.front.rgb);
                 $('#version').html(d.version);
-                $('#error').html(d.isMaster ? '&nbsp;' : 'Controlled by ' + d.master.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
                 masterIp = !d.isMaster ? d.masterIp : null;
+                sleep = d.sleep;
+                $('#sleep').css('background-color', sleep ? '#2196F3' : '#222');
 
                 if (d.hasOwnProperty('favs')) {
                     favs = d.favs;
@@ -36,6 +37,16 @@
                         let v = $(this).html().replace(/^[^\w]*/, '');
                         $(this).html((favs.hasOwnProperty($(this).val()) ? '&#9733 ' : '&#8199&#8198&#8198&#8198 ') + v);
                     });
+                }
+
+                if (!d.isMaster) {
+                    $('#error').html('Controlled by ' + d.master.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
+                } else if (sleep) {
+                    let d = sleep/60;
+                    let msg = 'Sleeping in' + (d <= 1 ? ' under a minute' : ' ' + Math.ceil(d) + ' minutes');
+                    $('#error').html(msg).css('color', '#00ffaf');
+                } else {
+                    $('#error').html('&nbsp;').css('color', '#ffaf00');
                 }
 
                 let isFav = favs[b ? d.back.effect : d.front.effect];
@@ -59,7 +70,7 @@
             }
 
             function markLive(on) {
-                $('#error').html(on ? '&nbsp;' : 'Disconnected');
+                $('#error').html(on ? '&nbsp;' : 'Disconnected').css('color', '#ffaf00');
             }
 
             function startWebSocket() {
@@ -149,7 +160,16 @@
                 if (ws && ws.readyState === 1) {
                     ws.send("/sync&" + (!synced ? 'on' : 'off'));
                 }
+                $('#sync').css('background-color', !sleep ? '#2196F3' : '#222');
                 console.log('Sync: ', !synced);
+            });
+
+            $('#sleep').click(function (e) {
+                if (ws && ws.readyState === 1) {
+                    ws.send("/sleep&" + (!sleep ? 'on' : 'off'));
+                }
+                $('#sleep').css('background-color', !sleep ? '#2196F3' : '#222');
+                console.log('Sleep: ', !synced);
             });
 
             $('#fav').click(function (e) {
@@ -390,6 +410,7 @@
             background-image: url('sync.png');
             background-repeat: no-repeat, repeat;
             background-position: 7px 6px;
+            margin-left: 16px;
         }
 
         #sleep {

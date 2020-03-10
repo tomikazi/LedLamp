@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.09.006"
+#define SW_VERSION      "2020.03.09.008"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -152,6 +152,10 @@ uint16_t oldsample = 0;
 
 #define SAMPLE_TIMEOUT  1000
 uint32_t lastSample = 0;
+
+
+#define SLEEP_TIMEOUT   30*60000
+uint32_t sleepTime = 0;
 
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
@@ -302,6 +306,9 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     } else if (strstr(topic, "/back")) {
         processCallback(topic, value, &back);
 
+    } else if (strstr(topic, "/sleep")) {
+        sleepTime = !strcmp(value, "on") ? (millis() + SLEEP_TIMEOUT) : 0;
+
     } else if (strstr(topic, "/sync")) {
         syncWithMaster = !strcmp(value, "on");
         saveState();
@@ -348,7 +355,8 @@ void handleWsCommand(char *cmd) {
 
 #define STATUS \
     "{%s,%s,\"master\": \"%s\",\"masterIp\": \"%s\",\"isMaster\": %s,\"hasPotentialMaster\": %s," \
-    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",%s\"version\":\"" SW_VERSION "\"}"
+    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",%s" \
+    "\"sleep\": %lu,\"version\":\"" SW_VERSION "\"}"
 
 void broadcastState(boolean all) {
     char state[1024], f[128], b[128], favs[512];
@@ -365,7 +373,7 @@ void broadcastState(boolean all) {
              hasPotentialMaster() ? "true" : "false",
              syncWithMaster ? "true" : "false",
              buddyAvailable ? "true" : "false",
-             peers[0].name, favs);
+             peers[0].name, favs, sleepTime ? (sleepTime - millis())/1000 : 0);
     wsServer.broadcastTXT(state);
 }
 
@@ -657,6 +665,16 @@ void handleLEDs(Strip *strip) {
     }
 }
 
+void handleSleep() {
+    if (sleepTime && sleepTime < millis()) {
+        front.on = false;
+        syncColorSettings(&front);
+        back.on = false;
+        syncColorSettings(&back);
+        sleepTime = 0;
+    }
+}
+
 void handleSamples() {
     if (lastSample && lastSample < millis()) {
         lastSample = 0;
@@ -682,6 +700,11 @@ void loop() {
         handlePeers();
         handleSamples();
     }
+
+    EVERY_N_SECONDS(1) {
+        handleSleep();
+    }
+
     handleLEDs(&front);
     handleLEDs(&back);
 }
