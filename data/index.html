@@ -41,10 +41,10 @@
 
                 if (!d.isMaster) {
                     $('#error').html('Controlled by ' + d.master.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
-                } else if (sleep) {
+                } else if (sleep > 0 && sleep < 18000) {
                     let d = sleep/60;
-                    let msg = 'Sleeping in' + (d <= 1 ? ' under a minute' : ' ' + Math.ceil(d) + ' minutes');
-                    $('#error').html(msg).css('color', '#00ffaf');
+                    let msg = d <= 1 ? 'Fading to sleep' : 'Sleeping in ' + Math.ceil(d) + ' minutes';
+                    $('#error').html(msg).css('color', '#00afff');
                 } else {
                     $('#error').html('&nbsp;').css('color', '#ffaf00');
                 }
