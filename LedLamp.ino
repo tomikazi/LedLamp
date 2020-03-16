@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.12.002"
+#define SW_VERSION      "2020.03.15.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -119,6 +119,7 @@ uint8_t master = 0;
 
 boolean syncWithMaster = true;
 boolean buddyAvailable = false;
+boolean buddySilent = false;
 uint32_t buddyTimestamp = 0;
 uint32_t buddyIp = 0;
 
@@ -553,8 +554,6 @@ void prunePeers() {
     } else if (!peerCount && !buddyAvailable && hadBuddyAndPeer) {
         gizmo.debug("Restarting group");
         group.flush();
-//        group.stop();
-//        group.beginMulticast(WiFi.localIP(), groupIp, GROUP_PORT);
     }
 }
 
@@ -612,6 +611,7 @@ void handlePeer(Command command) {
                 buddyIp = command.src;
                 buddyAvailable = true;
                 buddyTimestamp = millis() + PEER_TIMEOUT;
+                buddySilent = command.data[0];
                 break;
             default:
                 break;
@@ -842,7 +842,8 @@ Pattern patterns[] = {
         Pattern{.name = "sr_pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
-        Pattern{.name = "sr_matrix", .renderer = matrix, .huePause = 2000, .renderPause = 40, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_matrix", .renderer = matrixDown, .huePause = 2000, .renderPause = 40, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_matrixup", .renderer = matrixUp, .huePause = 2000, .renderPause = 40, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
@@ -868,7 +869,8 @@ Pattern *findPattern(const char *name) {
 Pattern *randomPattern(Strip *s) {
     Pattern *old = s->pattern;
     Pattern *p;
-    RandomMode mode = s->randomMode == FAVORITES && favCount == 0 ? ALL : s->randomMode;
+    RandomMode mode = s->randomMode == FAVORITES && favCount == 0 ?
+                      (buddySilent ? NOT_SOUND_REACTIVE : ALL) : s->randomMode;
     do {
         p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
     } while (p == old ||
