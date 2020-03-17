@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.16.001"
+#define SW_VERSION      "2020.03.16.003"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -161,7 +161,11 @@ uint32_t sleepDimmer = 100;
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL, onUpdate);
-//    gizmo.debugEnabled = true;
+
+    gizmo.httpServer()->on("/on", handleOn);
+    gizmo.httpServer()->on("/off", handleOff);
+    gizmo.setupWebRoot();
+    setupWebSocket();
 
     gizmo.setCallback(mqttCallback);
     gizmo.addTopic("%s/sync");
@@ -179,8 +183,6 @@ void setup() {
     gizmo.addTopic("%s/back/rgb");
     gizmo.addTopic("%s/back/brightness");
     gizmo.addTopic("%s/back/effect");
-
-    setupWebSocket();
 
     setupLED();
     gizmo.endSetup();
@@ -204,13 +206,27 @@ void setupWebSocket() {
     Serial.println("WebSocket server setup.");
 }
 
+void handleOn() {
+    ESP8266WebServer *server = gizmo.httpServer();
+    processCallback("/power", "on", &front);
+    processCallback("/power", "on", &back);
+    server->send(200, "text/plain", "on\n");
+}
+
+void handleOff() {
+    ESP8266WebServer *server = gizmo.httpServer();
+    processCallback("/power", "off", &front);
+    processCallback("/power", "off", &back);
+    server->send(200, "text/plain", "off\n");
+}
+
 // Command processors
-void processOnOff(char *value, Strip *strip) {
+void processOnOff(const char *value, Strip *strip) {
     strip->on = !strcmp(value, "on");
 }
 
 
-CRGB colorFromCSS(char *css) {
+CRGB colorFromCSS(const char *css) {
     char tmp[32];
     strncpy(tmp, css, 32);
     uint8_t r, g, b;
@@ -222,7 +238,7 @@ CRGB colorFromCSS(char *css) {
     return CRGB(r, g, b);
 }
 
-CRGB colorFromCSV(char *csv) {
+CRGB colorFromCSV(const char *csv) {
     char tmp[32];
     strncpy(tmp, csv, 32);
     uint8_t r, g, b;
@@ -235,7 +251,7 @@ CRGB colorFromCSV(char *csv) {
     return CRGB(r, g, b);
 }
 
-void processColor(char *value, Strip *strip) {
+void processColor(const char *value, Strip *strip) {
     strip->on = true;
     if (value[0] == '#') {
         strip->color = colorFromCSS(value);
@@ -246,7 +262,7 @@ void processColor(char *value, Strip *strip) {
     strip->randomMode = NOT_RANDOM;
 }
 
-void processBrightness(char *value, Strip *strip) {
+void processBrightness(const char *value, Strip *strip) {
     strip->brightness = atoi(value);
     strip->on = strip->brightness != 0;
 }
@@ -258,7 +274,7 @@ RandomMode randomMode(const char *name) {
            !strcmp(name, "nsr_random") ? NOT_SOUND_REACTIVE : NOT_RANDOM;
 }
 
-void processEffect(char *value, Strip *strip) {
+void processEffect(const char *value, Strip *strip) {
     strip->on = true;
     strip->randomMode = randomMode(value);
     if (strip->randomMode == NOT_RANDOM) {
@@ -268,7 +284,7 @@ void processEffect(char *value, Strip *strip) {
     }
 }
 
-void processCallback(char *topic, char *value, Strip *strip) {
+void processCallback(const char *topic, const char *value, Strip *strip) {
     if (strstr(topic, "/rgb")) {
         processColor(value, strip);
     } else if (strstr(topic, "/brightness")) {
@@ -669,6 +685,8 @@ void handleLEDs(Strip *strip) {
     }
 }
 
+#define SLEEP_FADE_DURATION 60000
+
 void handleSleep() {
     if (sleepTime && sleepTime < millis()) {
         front.on = false;
@@ -678,7 +696,7 @@ void handleSleep() {
         sleepTime = 0;
         sleepDimmer = 100;
 
-    } else if (sleepTime && (sleepTime - millis()) < 60000) {
+    } else if (sleepTime && (sleepTime - millis()) < SLEEP_FADE_DURATION) {
         sleepDimmer = (sleepTime - millis())/600;
     }
 }
