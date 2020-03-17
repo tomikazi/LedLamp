@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.15.001"
+#define SW_VERSION      "2020.03.16.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -870,7 +870,7 @@ Pattern *randomPattern(Strip *s) {
     Pattern *old = s->pattern;
     Pattern *p;
     RandomMode mode = s->randomMode == FAVORITES && favCount == 0 ?
-                      (buddySilent ? NOT_SOUND_REACTIVE : ALL) : s->randomMode;
+                      (buddySilent ? NOT_SOUND_REACTIVE : SOUND_REACTIVE) : s->randomMode;
     do {
         p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
     } while (p == old ||
