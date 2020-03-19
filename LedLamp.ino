@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.16.003"
+#define SW_VERSION      "2020.03.18.003"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -839,7 +839,8 @@ void saveState() {
 #include "noisepal.h"
 #include "besin.h"
 #include "fillnoise.h"
-#include "plasmasr.h"0
+#include "plasmasr.h"
+#include "rainbowbit.h"
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
@@ -866,6 +867,7 @@ Pattern patterns[] = {
         Pattern{.name = "sr_noisefire", .renderer = noisefire, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_noisepal", .renderer = noisepal, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_rainbowbit", .renderer = rainbowbit, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_besin", .renderer = besin, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_fillnoise", .renderer = fillnoise, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_plasma", .renderer = plasmasr, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = false},
