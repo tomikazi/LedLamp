@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.18.003"
+#define SW_VERSION      "2020.03.19.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -198,6 +198,9 @@ void setupLED() {
     fadeToBlackBy(backLeds, LED_COUNT, 255);
     back.ctl->showLeds(back.brightness);
     back.pattern = findPattern("glitter");
+
+    loadState();
+    loadFavorites();
 }
 
 void setupWebSocket() {
@@ -251,8 +254,8 @@ CRGB colorFromCSV(const char *csv) {
     return CRGB(r, g, b);
 }
 
-void processColor(const char *value, Strip *strip) {
-    strip->on = true;
+void processColor(const char *value, Strip *strip, boolean turnOn) {
+    strip->on = turnOn;
     if (value[0] == '#') {
         strip->color = colorFromCSS(value);
     } else {
@@ -274,8 +277,8 @@ RandomMode randomMode(const char *name) {
            !strcmp(name, "nsr_random") ? NOT_SOUND_REACTIVE : NOT_RANDOM;
 }
 
-void processEffect(const char *value, Strip *strip) {
-    strip->on = true;
+void processEffect(const char *value, Strip *strip, boolean turnOn) {
+    strip->on = turnOn;
     strip->randomMode = randomMode(value);
     if (strip->randomMode == NOT_RANDOM) {
         strip->pattern = findPattern(value);
@@ -286,11 +289,11 @@ void processEffect(const char *value, Strip *strip) {
 
 void processCallback(const char *topic, const char *value, Strip *strip) {
     if (strstr(topic, "/rgb")) {
-        processColor(value, strip);
+        processColor(value, strip, true);
     } else if (strstr(topic, "/brightness")) {
         processBrightness(value, strip);
     } else if (strstr(topic, "/effect")) {
-        processEffect(value, strip);
+        processEffect(value, strip, true);
     } else if (strstr(topic, "/fav")) {
         strip->pattern->favorite = !strip->pattern->favorite;
         saveFavorites();
@@ -397,8 +400,8 @@ void broadcastState(boolean all) {
 void onUpdate() {
     // Suppress samples and switch to glitter
     broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = SAMPLE_REQ, .data = {[0] = 0}});
-    processEffect((char *) "plasma", &front);
-    processEffect((char *) "cycle", &back);
+    processEffect((char *) "plasma", &front, true);
+    processEffect((char *) "cycle", &back, true);
 }
 
 void unicast(uint32_t ip, uint16_t port, Command command) {
@@ -651,11 +654,13 @@ void handleLEDs(Strip *strip) {
 
         EVERY_X_MILLIS(strip->t1, strip->pattern->renderPause)
             strip->pattern->renderer(strip);
+            strip->leds[0] = WiFi.status() != WL_CONNECTED ? CRGB::Red : strip->leds[0];
             strip->ctl->showLeds(sleepDimmer < 100 ? (uint8_t) ((sleepDimmer * strip->brightness)/100) : strip->brightness);
         }
     } else {
-        fill_solid(strip->leds, LED_COUNT, strip->color);
-        strip->ctl->showLeds(strip->on ? strip->brightness : 0);
+        fill_solid(strip->leds, LED_COUNT, strip->on ? strip->color : CRGB::Black);
+        strip->leds[0] = WiFi.status() != WL_CONNECTED ? CRGB::Red : strip->leds[0];
+        strip->ctl->showLeds(strip->brightness);
     }
 
     // Change the target palette to a 'related colours' palette every 5 seconds.
@@ -736,9 +741,6 @@ void loop() {
 }
 
 void finishWiFiConnect() {
-    loadState();
-    loadFavorites();
-
     peers[0].ip = (uint32_t) WiFi.localIP();
     strcpy(peers[0].name, gizmo.getHostname());
 
@@ -788,7 +790,7 @@ void loadStripState(File f, Strip *s) {
 
     l = f.readBytesUntil('|', field, 32);
     field[l] = '\0';
-    processColor(field, s);
+    processColor(field, s, s->on);
 
     l = f.readBytesUntil('|', field, 7);
     field[l] = '\0';
@@ -798,7 +800,7 @@ void loadStripState(File f, Strip *s) {
     field[l] = '\0';
     s->pattern = NULL;
     if (strcmp(field, "none")) {
-        processEffect(field, s);
+        processEffect(field, s, s->on);
     }
 }
 
