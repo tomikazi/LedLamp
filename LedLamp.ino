@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.19.001"
+#define SW_VERSION      "2020.03.19.002"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -321,6 +321,7 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     if (strstr(topic, "/all")) {
         processCallback(topic, value, &front);
         processCallback(topic, value, &back);
+        gizmo.schedulePublish("%s/all/state", front.on || back.on ? "on" : "off");
     } else if (strstr(topic, "/front")) {
         processCallback(topic, value, &front);
     } else if (strstr(topic, "/back")) {
