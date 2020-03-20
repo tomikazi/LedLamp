@@ -37,6 +37,9 @@
                 sleep = d.sleep;
                 $('#sleep').css('background-color', sleep ? '#2196F3' : '#222');
 
+                $('#autoOn').val(d.autoOn);
+                $('#autoOff').val(d.autoOff);
+
                 if (d.hasOwnProperty('favs')) {
                     favs = d.favs;
                     console.log('Got new favs!', favs);
@@ -193,6 +196,12 @@
                 $('.led-selector label').css('background', '#ccc');
                 $('label[for="' + $(this).attr('id') + '"]').css('background', '#2196F3');
                 send("get", "status");
+            });
+
+            $('#sched input[type=time]').change(function (e) {
+                if (ws && ws.readyState === 1) {
+                    ws.send("/" + $(this).attr('id') + "&" + $(this).val() + ".");
+                }
             });
 
             $('label[for="front"]').css('background', '#2196F3');
@@ -434,6 +443,24 @@
             background-position: 6px 4px;
         }
 
+        #sched {
+            color: #ccc;
+            font-size: 16px;
+        }
+
+        #sched input {
+            -webkit-border-radius: 6px;
+            font-size: 17px;
+            background: #ccc;
+            border: 0px;
+            width: 70px;
+            height: 30px;
+            outline: none;
+            text-align-last: center;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
         #settings {
             margin: 48px 16px 16px 16px;
         }
@@ -508,15 +535,22 @@
         </div>
         <p>
         <div id="icons">
-        <div id="fav" class="toggle"></div>
-        <div id="pallette"><input type="color" name="color" id="color" value="#ff0000"/></div>
-        <div id="sleep" class="toggle"></div>
-        <div id="sync" class="toggle"></div>
-    </div>
-        <p>
-        <div id="settings"><a href="/nets" border="0"><img src="gears.png"/></a></div>
-        <div id="version">2019.05.15.001</div>
-    </div>
+            <div id="fav" class="toggle"></div>
+            <div id="pallette"><input type="color" name="color" id="color" value="#ff0000"/></div>
+            <div id="sleep" class="toggle"></div>
+            <div id="sync" class="toggle"></div>
+        </div>
+        <div id="sched">
+            <input type="time" id="autoOn" name="autoOn" value=""/>
+            &#8199&#8198&#8198&#8198
+            <input type="time" id="autoOff" name="autoOff" value=""/>
+            <br>Wake &#8199&#8199&#8199&#8199&#8199&#8199&#8198&#8198&#8198 Sleep
+        </div>
+        <div>
+            <p>
+            <div id="settings"><a href="/nets" border="0"><img src="gears.png"/></a></div>
+            <div id="version">2019.05.15.001</div>
+        </div>
 </body>
 </html>
 
