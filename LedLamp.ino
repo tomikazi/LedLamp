@@ -8,11 +8,10 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.20.001"
+#define SW_VERSION      "2020.03.21.002"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
-#define SCHED      "/cfg/sched"
 
 #define FRONT_PIN       4
 #define BACK_PIN        5
@@ -159,17 +158,9 @@ uint32_t lastSample = 0;
 uint32_t sleepTime = 0;
 uint32_t sleepDimmer = 100;
 
-typedef struct {
-    uint8_t h = 99;
-    uint8_t m = 99;
-} Alarm;
-
-Alarm sleep, wake;
-
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL, onUpdate);
-    gizmo.setupNTPClient();
 
 //    gizmo.debugEnabled = true;
 
@@ -212,7 +203,6 @@ void setupLED() {
 
     loadState();
     loadFavorites();
-    loadSched();
 }
 
 void setupWebSocket() {
@@ -322,17 +312,6 @@ void processCallback(const char *topic, const char *value, Strip *strip) {
     requestSamples();
 }
 
-void processAlarm(Alarm *a, const char *value) {
-    if (strlen(value) > 4 && value[2] == ':') {
-        a->h = atoi(value);
-        a->m = atoi(value+3);
-    } else {
-        a->h = 99;
-        a->m = 99;
-    }
-    saveSched();
-}
-
 void processSync(const char *value) {
     syncWithMaster = !strcmp(value, "on");
     saveState();
@@ -360,11 +339,6 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
 
     } else if (strstr(topic, "/sleep")) {
         sleepTime = !strcmp(value, "on") ? (millis() + SLEEP_TIMEOUT) : 0;
-
-    } else if (strstr(topic, "/autoOn")) {
-        processAlarm(&wake, value);
-    } else if (strstr(topic, "/autoOff")) {
-        processAlarm(&sleep, value);
 
     } else if (strstr(topic, "/sync")) {
         processSync(value);
@@ -408,7 +382,7 @@ void handleWsCommand(char *cmd) {
 #define STATUS \
     "{%s,%s,\"master\": \"%s\",\"masterIp\": \"%s\",\"isMaster\": %s,\"hasPotentialMaster\": %s," \
     "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",%s" \
-    "\"sleep\": %lu,\"autoOn\": \"%02u:%02u\",\"autoOff\": \"%02u:%02u\",\"version\":\"" SW_VERSION "\"}"
+    "\"sleep\": %lu,\"version\":\"" SW_VERSION "\"}"
 
 void broadcastState(boolean all) {
     char state[1024], f[128], b[128], favs[512];
@@ -425,8 +399,7 @@ void broadcastState(boolean all) {
              hasPotentialMaster() ? "true" : "false",
              syncWithMaster ? "true" : "false",
              buddyAvailable ? "true" : "false",
-             peers[0].name, favs, sleepTime ? (sleepTime - millis())/1000 : 0,
-             wake.h, wake.m, sleep.h, sleep.m);
+             peers[0].name, favs, sleepTime ? (sleepTime - millis())/1000 : 0);
     wsServer.broadcastTXT(state);
 }
 
@@ -726,22 +699,6 @@ void handleLEDs(Strip *strip) {
 
 #define SLEEP_FADE_DURATION 60000
 
-void handleAlarm(Alarm a, boolean on) {
-    NTPClient *tc = gizmo.timeClient();
-    if (a.h == tc->getHours() && a.m == tc->getMinutes()) {
-        if (front.on != on) {
-            front.on = on;
-            syncColorSettings(&front);
-            broadcastState(false);
-        }
-        if (back.on != on) {
-            back.on = on;
-            syncColorSettings(&back);
-            broadcastState(false);
-        }
-    }
-}
-
 void handleSleep() {
     if (sleepTime && sleepTime < millis()) {
         front.on = false;
@@ -780,11 +737,6 @@ void loop() {
         wsServer.loop();
         handlePeers();
         handleSamples();
-    }
-
-    EVERY_N_SECONDS(5) {
-        handleAlarm(sleep, false);
-        handleAlarm(wake, true);
     }
 
     EVERY_N_SECONDS(1) {
@@ -875,31 +827,6 @@ void saveState() {
         f.printf("%s|%d,%d,%d|%d|%s\n", back.on ? "on" : "off",
                  back.color.red, back.color.green, back.color.blue, back.brightness, effect(&back));
         f.printf("%s\n", syncWithMaster ? "on" : "off");
-        f.close();
-    }
-}
-
-
-void loadSched() {
-    Serial.printf("Loading schedule...\n");
-    File f = SPIFFS.open(SCHED, "r");
-    if (f) {
-        char w[8], s[8];
-        int l = f.readBytesUntil('-', w, 7);
-        w[l] = '\0';
-        l = f.readBytesUntil('\n', s, 7);
-        s[l] = '\0';
-        processAlarm(&wake, w);
-        processAlarm(&sleep, s);
-        f.close();
-    }
-}
-
-void saveSched() {
-    Serial.printf("Saving schedule...\n");
-    File f = SPIFFS.open(SCHED, "w");
-    if (f) {
-        f.printf("%02u:%02u-%02u:%02u\n", wake.h, wake.m, sleep.h, sleep.m);
         f.close();
     }
 }
