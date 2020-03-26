@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.24.001"
+#define SW_VERSION      "2020.03.25.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -310,6 +310,7 @@ void processCallback(const char *topic, const char *value, Strip *strip) {
     syncPattern(strip);
     syncColorSettings(strip);
     requestSamples();
+    broadcastState(false);
 }
 
 void processSync(const char *value) {
