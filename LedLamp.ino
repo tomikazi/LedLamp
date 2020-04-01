@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.03.25.001"
+#define SW_VERSION      "2020.03.31.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -382,7 +382,7 @@ void handleWsCommand(char *cmd) {
 
 #define STATUS \
     "{%s,%s,\"master\": \"%s\",\"masterIp\": \"%s\",\"isMaster\": %s,\"hasPotentialMaster\": %s," \
-    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"name\": \"%s\",%s" \
+    "\"syncWithMaster\": %s,\"buddyAvailable\": %s,\"buddySilent\": %s,\"name\": \"%s\",%s" \
     "\"sleep\": %lu,\"version\":\"" SW_VERSION "\"}"
 
 void broadcastState(boolean all) {
@@ -400,7 +400,8 @@ void broadcastState(boolean all) {
              hasPotentialMaster() ? "true" : "false",
              syncWithMaster ? "true" : "false",
              buddyAvailable ? "true" : "false",
-             peers[0].name, favs, sleepTime ? (sleepTime - millis())/1000 : 0);
+             buddySilent ? "true" : "false",
+             peers[0].name, favs, sleepTime ? (sleepTime - millis()) / 1000 : 0);
     wsServer.broadcastTXT(state);
 }
 
@@ -663,7 +664,8 @@ void handleLEDs(Strip *strip) {
         EVERY_X_MILLIS(strip->t1, strip->pattern->renderPause)
             strip->pattern->renderer(strip);
             strip->leds[0] = WiFi.status() != WL_CONNECTED ? CRGB::Red : strip->leds[0];
-            strip->ctl->showLeds(sleepDimmer < 100 ? (uint8_t) ((sleepDimmer * strip->brightness)/100) : strip->brightness);
+            strip->ctl->showLeds(
+                    sleepDimmer < 100 ? (uint8_t)((sleepDimmer * strip->brightness) / 100) : strip->brightness);
         }
     } else {
         fill_solid(strip->leds, LED_COUNT, strip->on ? strip->color : CRGB::Black);
@@ -711,7 +713,7 @@ void handleSleep() {
         broadcastState(false);
 
     } else if (sleepTime && (sleepTime - millis()) < SLEEP_FADE_DURATION) {
-        sleepDimmer = (sleepTime - millis())/600;
+        sleepDimmer = (sleepTime - millis()) / 600;
     }
 }
 
@@ -740,7 +742,8 @@ void loop() {
         handleSamples();
     }
 
-    EVERY_N_SECONDS(1) {
+    EVERY_N_SECONDS(1)
+    {
         handleSleep();
     }
 
@@ -898,14 +901,28 @@ Pattern *findPattern(const char *name) {
 }
 
 Pattern *randomPattern(Strip *s) {
-    Pattern *old = s->pattern;
     Pattern *p;
-    RandomMode mode = s->randomMode == FAVORITES && favCount == 0 ?
-                      (buddySilent ? NOT_SOUND_REACTIVE : SOUND_REACTIVE) : s->randomMode;
+    boolean nsrFavs = 0;
+
+    int n = ARRAY_SIZE(patterns);
+    for (int i = 0; i < n; i++) {
+        if (!patterns[i].soundReactive && patterns[i].favorite) {
+            nsrFavs++;
+        }
+    }
+
+    RandomMode mode = s->randomMode;
+    if (mode == FAVORITES && favCount == 0) {
+        mode = buddySilent ? NOT_SOUND_REACTIVE : SOUND_REACTIVE;
+    } else if (buddySilent && mode == FAVORITES && nsrFavs == 0) {
+        mode = NOT_SOUND_REACTIVE;
+    } else if (buddySilent && mode == SOUND_REACTIVE) {
+        mode = NOT_SOUND_REACTIVE;
+    }
+
     do {
         p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
-    } while (p == old ||
-             (mode == FAVORITES && !p->favorite) ||
+    } while ((mode == FAVORITES && (!p->favorite || (p->soundReactive && buddySilent))) ||
              (mode == SOUND_REACTIVE && !p->soundReactive) ||
              (mode == NOT_SOUND_REACTIVE && p->soundReactive));
     return p;
