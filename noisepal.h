@@ -27,7 +27,7 @@ void noisepal(Strip *s) {
         index = (255 - i * 256 / LED_COUNT) * index / 128;
 
         // With that value, look up the 8 bit colour palette value and assign it to the current LED.
-        s->leds[LED_COUNT / 2 - i / 2 + 1] = ColorFromPalette(s->currentPalette, index, sampleavg, NOBLEND);
-        s->leds[LED_COUNT / 2 + i / 2 - 1] = ColorFromPalette(s->currentPalette, index, sampleavg, NOBLEND);
+        s->leds[LED_COUNT / 2 - i / 2 - 1] = ColorFromPalette(s->currentPalette, index, sampleavg, NOBLEND);
+        s->leds[LED_COUNT / 2 + i / 2] = ColorFromPalette(s->currentPalette, index, sampleavg, NOBLEND);
     }
 }
