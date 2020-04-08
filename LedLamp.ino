@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.04.07.001"
+#define SW_VERSION      "2020.04.08.002"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -263,8 +263,8 @@ void processColor(const char *value, Strip *strip, boolean turnOn) {
     } else {
         strip->color = colorFromCSV(value);
     }
-    strip->pattern = findPattern("solid");
-    strip->randomMode = NOT_RANDOM;
+//    strip->pattern = findPattern("solid");
+//    strip->randomMode = NOT_RANDOM;
 }
 
 void processBrightness(const char *value, Strip *strip) {
@@ -871,6 +871,8 @@ Pattern patterns[] = {
         Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "gradient", .renderer = gradient, .huePause = 200, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "vibrancy", .renderer = vibrancy, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
 
         Pattern{.name = "sr_pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
