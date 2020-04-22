@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.04.08.003"
+#define SW_VERSION      "2020.04.22.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -46,10 +46,10 @@ typedef void (*Renderer)(Strip *);
 typedef struct Pattern {
     const char *name;
     Renderer renderer;
-    uint32_t huePause;
-    uint32_t renderPause;
-    boolean soundReactive;
-    boolean favorite;
+    int32_t  huePause;
+    int32_t  renderPause;
+    boolean  soundReactive;
+    boolean  favorite;
 } Pattern;
 
 typedef enum {
@@ -652,16 +652,22 @@ void handlePeer(Command command) {
 
 void handleLEDs(Strip *strip) {
     if (strip->on && strip->pattern) {
-        EVERY_X_MILLIS(strip->tb, 20)
-            uint8_t maxChanges = 24;
-            nblendPaletteTowardPalette(strip->currentPalette, strip->targetPalette, maxChanges);
+        uint32_t renderPause = strip->pattern->renderPause > 0 ? strip->pattern->renderPause : -strip->pattern->renderPause;
+
+        if (strip->pattern->renderPause > 0) {
+            EVERY_X_MILLIS(strip->tb, 20)
+                uint8_t maxChanges = 24;
+                nblendPaletteTowardPalette(strip->currentPalette, strip->targetPalette, maxChanges);
+            }
         }
 
-        EVERY_X_MILLIS(strip->th, strip->pattern->huePause)
-            strip->hue++; // slowly cycle the "base color" through the rainbow
+        if (strip->pattern->huePause > 0) {
+            EVERY_X_MILLIS(strip->th, strip->pattern->huePause)
+                strip->hue++; // slowly cycle the "base color" through the rainbow
+            }
         }
 
-        EVERY_X_MILLIS(strip->t1, strip->pattern->renderPause)
+        EVERY_X_MILLIS(strip->t1, renderPause)
             strip->pattern->renderer(strip);
             strip->leds[0] = WiFi.status() != WL_CONNECTED ? CRGB::Red : strip->leds[0];
             strip->ctl->showLeds(
@@ -677,12 +683,14 @@ void handleLEDs(Strip *strip) {
     EVERY_X_MILLIS(strip->tp, 5000)
         if (isMaster(WiFi.localIP())) {
             // This is the base colour. Other colours are within 16 hues of this. One color is 128 + baseclr.
-            uint8_t baseclr = random8();
-            strip->targetPalette = CRGBPalette16(
-                    CHSV(baseclr + random8(64), 255, random8(128, 255)),
-                    CHSV(baseclr + random8(64), 255, random8(128, 255)),
-                    CHSV(baseclr + random8(64), 192, random8(128, 255)),
-                    CHSV(baseclr + random8(64), 255, random8(128, 255)));
+            if (strip->pattern->renderPause > 0) {
+                uint8_t baseclr = random8();
+                strip->targetPalette = CRGBPalette16(
+                        CHSV(baseclr + random8(64), 255, random8(128, 255)),
+                        CHSV(baseclr + random8(64), 255, random8(128, 255)),
+                        CHSV(baseclr + random8(64), 192, random8(128, 255)),
+                        CHSV(baseclr + random8(64), 255, random8(128, 255)));
+            }
             syncColorSettings(strip);
             syncPattern(strip);
         }
@@ -855,6 +863,8 @@ void saveState() {
 #include "plasmasr.h"
 #include "rainbowbit.h"
 #include "firesr.h"
+#include "pacifica.h"
+#include "twinklefox.h"
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
@@ -873,6 +883,8 @@ Pattern patterns[] = {
         Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "gradient", .renderer = gradient, .huePause = 200, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "vibrancy", .renderer = vibrancy, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "pacifica", .renderer = pacifica, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "twinklefox", .renderer = twinklefox, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
 
         Pattern{.name = "sr_pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
