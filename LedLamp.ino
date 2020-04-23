@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.04.22.002"
+#define SW_VERSION      "2020.04.22.003"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -873,6 +873,7 @@ Pattern patterns[] = {
         Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "rainbow", .renderer = rainbow, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "rainbowg", .renderer = rainbowWithGlitter, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "pride", .renderer = pride, .huePause = 20, .renderPause = 10, .soundReactive = false, .favorite = false},
         Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
