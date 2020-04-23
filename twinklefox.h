@@ -209,9 +209,18 @@ FL_PROGMEM =
         };
 
 
+// Embers palette with some brightness variations
+const TProgmemRGBPalette16 Embers_p
+FL_PROGMEM =
+        {CRGB::Black, CRGB::DarkRed, CRGB::Orange, CRGB::DarkRed,
+         CRGB::Gold, CRGB::Goldenrod, CRGB::Orange, CRGB::Gold,
+         CRGB::Orange, CRGB::Gold, CRGB::Black, CRGB::FairyLight,
+         CRGB::Black, CRGB::DarkRed, CRGB::Gold, CRGB::Orange};
+
+
 // Add or remove palette names from this list to control which color
 // palettes are used, and in what order.
-const TProgmemRGBPalette16 *ActivePaletteList[] = {
+const TProgmemRGBPalette16 *FestivePaletteList[] = {
         &RetroC9_p,
         &BlueWhite_p,
         &RainbowColors_p,
@@ -225,19 +234,34 @@ const TProgmemRGBPalette16 *ActivePaletteList[] = {
 };
 
 
+// Add or remove palette names from this list to control which color
+// palettes are used, and in what order.
+const TProgmemRGBPalette16 *PlainPaletteList[] = {
+        &BlueWhite_p,
+        &FairyLight_p,
+        &Snow_p,
+};
+
+
+// Add or remove palette names from this list to control which color
+// palettes are used, and in what order.
+const TProgmemRGBPalette16 *EmbersPaletteList[] = {
+        &Embers_p,
+};
+
+
 // Advance to the next color palette in the list (above).
-void chooseNextColorPalette(CRGBPalette16 &pal) {
-    const uint8_t numberOfPalettes = sizeof(ActivePaletteList) / sizeof(ActivePaletteList[0]);
+void chooseNextFestiveColorPalette(CRGBPalette16 &pal) {
+    const uint8_t numberOfPalettes = sizeof(FestivePaletteList) / sizeof(FestivePaletteList[0]);
     static uint8_t whichPalette = -1;
     whichPalette = addmod8(whichPalette, 1, numberOfPalettes);
-
-    pal = *(ActivePaletteList[whichPalette]);
+    pal = *(FestivePaletteList[whichPalette]);
 }
 
 void twinklefox(Strip *s) {
     EVERY_N_SECONDS(SECONDS_PER_PALETTE) {
         if (isMaster(WiFi.localIP())) {
-            chooseNextColorPalette(s->targetPalette);
+            chooseNextFestiveColorPalette(s->targetPalette);
         }
     }
 
@@ -248,6 +272,47 @@ void twinklefox(Strip *s) {
     drawTwinkles(s);
 }
 
+void chooseNextPlainColorPalette(CRGBPalette16 &pal) {
+    const uint8_t numberOfPalettes = sizeof(PlainPaletteList) / sizeof(PlainPaletteList[0]);
+    static uint8_t whichPalette = -1;
+    whichPalette = addmod8(whichPalette, 1, numberOfPalettes);
+    pal = *(PlainPaletteList[whichPalette]);
+}
+
+void twinkleplain(Strip *s) {
+    EVERY_N_SECONDS(SECONDS_PER_PALETTE) {
+        if (isMaster(WiFi.localIP())) {
+            chooseNextPlainColorPalette(s->targetPalette);
+        }
+    }
+
+    EVERY_N_MILLISECONDS(10) {
+        nblendPaletteTowardPalette(s->currentPalette, s->targetPalette, 12);
+    }
+
+    drawTwinkles(s);
+}
+
+void chooseNextEmbersColorPalette(CRGBPalette16 &pal) {
+    const uint8_t numberOfPalettes = sizeof(EmbersPaletteList) / sizeof(EmbersPaletteList[0]);
+    static uint8_t whichPalette = -1;
+    whichPalette = addmod8(whichPalette, 1, numberOfPalettes);
+    pal = *(EmbersPaletteList[whichPalette]);
+}
+
+void embers(Strip *s) {
+    EVERY_N_SECONDS(3) {
+        if (isMaster(WiFi.localIP())) {
+            chooseNextEmbersColorPalette(s->targetPalette);
+        }
+    }
+
+    EVERY_N_MILLISECONDS(10) {
+        nblendPaletteTowardPalette(s->currentPalette, s->targetPalette, 12);
+    }
+
+    drawTwinkles(s);
+}
 
 //  This function loops over each pixel, calculates the
 //  adjusted 'clock' that this pixel should use, and calls
