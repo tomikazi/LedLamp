@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.04.22.003"
+#define SW_VERSION      "2020.04.26.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -865,6 +865,7 @@ void saveState() {
 #include "firesr.h"
 #include "pacifica.h"
 #include "twinklefox.h"
+#include "fireworks.h"
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
@@ -888,6 +889,7 @@ Pattern patterns[] = {
         Pattern{.name = "embers", .renderer = embers, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
         Pattern{.name = "twinkleplain", .renderer = twinkleplain, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
         Pattern{.name = "twinklefox", .renderer = twinklefox, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
+        Pattern{.name = "fireworks", .renderer = fireworks, .huePause = 20, .renderPause = 2, .soundReactive = false, .favorite = false},
 
         Pattern{.name = "sr_pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
