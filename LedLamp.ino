@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.04.26.001"
+#define SW_VERSION      "2020.04.28.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -191,6 +191,8 @@ void setup() {
 }
 
 void setupLED() {
+    FastLED.setMaxPowerInVoltsAndMilliamps(5,2400);
+
     front.ctl = &FastLED.addLeds<LED_TYPE, FRONT_PIN, COLOR_ORDER>(frontLeds, LED_COUNT).setCorrection(TypicalLEDStrip);
     fadeToBlackBy(frontLeds, LED_COUNT, 255);
     front.ctl->showLeds(front.brightness);
