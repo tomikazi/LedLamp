@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.04.28.001"
+#define SW_VERSION      "2020.05.09.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -125,9 +125,10 @@ uint32_t buddyIp = 0;
 
 boolean hadBuddyAndPeer = false;
 
-#define FRONT_CTX       0x01
-#define BACK_CTX        0x10
-#define ALL_CTX         FRONT_CTX | BACK_CTX
+#define GROUP_MASK      0x01000
+#define FRONT_CTX       (0x0001 | GROUP_MASK)
+#define BACK_CTX        (0x0002 | GROUP_MASK)
+#define ALL_CTX         (FRONT_CTX | BACK_CTX)
 
 #define HELLO           001
 
@@ -447,7 +448,7 @@ void requestSamples() {
 }
 
 void sayHello() {
-    Command cmd = {.src = peers[0].ip, .ctx = ALL_CTX, .op = HELLO, .data = {[0] = 0}};
+    Command cmd = {.src = peers[0].ip, .ctx = GROUP_MASK, .op = HELLO, .data = {[0] = 0}};
     strncat((char *) cmd.data, peers[0].name, MAX_CMD_DATA);
     broadcast(cmd);
 }
@@ -619,20 +620,28 @@ void handlePeer(Command command) {
     if (command.src != (uint32_t) WiFi.localIP()) {
         switch (command.op) {
             case HELLO:
-                addPeer(command.src, (char *) command.data);
-                determineMaster();
+                if (command.ctx & GROUP_MASK) {
+                    addPeer(command.src, (char *) command.data);
+                    determineMaster();
+                }
                 break;
             case SYNC_REQ:
-                syncColorSettings(&front);
-                syncPattern(&front);
-                syncColorSettings(&back);
-                syncPattern(&back);
+                if (command.ctx & GROUP_MASK) {
+                    syncColorSettings(&front);
+                    syncPattern(&front);
+                    syncColorSettings(&back);
+                    syncPattern(&back);
+                }
                 break;
             case PATTERN:
-                copyPattern(command);
+                if (command.ctx & GROUP_MASK) {
+                    copyPattern(command);
+                }
                 break;
             case COLORS:
-                copyColorSettings(command);
+                if (command.ctx & GROUP_MASK) {
+                    copyColorSettings(command);
+                }
                 break;
             case SAMPLE_ADV:
                 if (!buddyAvailable) {

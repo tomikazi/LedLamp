@@ -117,19 +117,16 @@ void vibrancy(Strip *s) {
     static int b2 = LED_COUNT * 0.7;
 
     EVERY_X_MILLIS(s->t2, 2000)
-    b1 = shift(b1, 6, b2, random(3) - 1);
-    b2 = shift(b2, b1, LED_COUNT - 6, random(3) - 1);
+        b1 = shift(b1, 6, b2, random(3) - 1);
+        b2 = shift(b2, b1, LED_COUNT - 6, random(3) - 1);
 
-    fill_solid(&s->leds[0], b1, C1);
-    fill_solid(&s->leds[b2], LED_COUNT - b2, C2);
-}
+        fill_solid(&s->leds[0], b1, C1);
+        fill_solid(&s->leds[b2], LED_COUNT - b2, C2);
+    }
 
-fill_solid(&s
-->leds[b1], b2 - b1, s->color);
-fill_gradient_RGB(&s
-->leds[b1 - 5], 10, C1, s->color);
-fill_gradient_RGB(&s
-->leds[b2 - 5], 10, s->color, C2);
+    fill_solid(&s->leds[b1], b2 - b1, s->color);
+    fill_gradient_RGB(&s->leds[b1 - 5], 10, C1, s->color);
+    fill_gradient_RGB(&s->leds[b2 - 5], 10, s->color, C2);
 }
 
 
