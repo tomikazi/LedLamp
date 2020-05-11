@@ -172,6 +172,7 @@ void setup() {
 
     gizmo.setCallback(mqttCallback);
     gizmo.addTopic("%s/sync");
+    gizmo.addTopic("%s/all");
 
     gizmo.addTopic("%s/front");
     gizmo.addTopic("%s/front/rgb");
@@ -339,7 +340,11 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
 
     Serial.printf("%s: %s\n", topic, value);
 
-    if (strstr(topic, "/front")) {
+    if (strstr(topic, "/all")) {
+        front.on = back.on = !strcmp(value, "on");
+        gizmo.schedulePublish("%s/all/state", front.on ? "on" : "off");
+
+    } else if (strstr(topic, "/front")) {
         processCallback(topic, value, &front);
     } else if (strstr(topic, "/back")) {
         processCallback(topic, value, &back);
