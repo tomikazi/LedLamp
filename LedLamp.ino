@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.05.10.001"
+#define SW_VERSION      "2020.05.11.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -809,7 +809,8 @@ void loadState() {
         loadStripState(f, &back);
 
         char field[32];
-        f.readBytesUntil('\n', field, 32);
+        int l = f.readBytesUntil('\n', field, 32);
+        field[l] = '\0';
         syncWithMaster = strcmp(field, "off");
         f.close();
 
