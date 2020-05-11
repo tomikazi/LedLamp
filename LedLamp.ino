@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.05.09.002"
+#define SW_VERSION      "2020.05.10.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -172,10 +172,6 @@ void setup() {
 
     gizmo.setCallback(mqttCallback);
     gizmo.addTopic("%s/sync");
-    gizmo.addTopic("%s/all");
-    gizmo.addTopic("%s/all/rgb");
-    gizmo.addTopic("%s/all/brightness");
-    gizmo.addTopic("%s/all/effect");
 
     gizmo.addTopic("%s/front");
     gizmo.addTopic("%s/front/rgb");
@@ -228,9 +224,17 @@ void handleOff() {
     server->send(200, "text/plain", "off\n");
 }
 
+void publishState(const char *topic, const char *value, Strip *strip) {
+    char stateTopic[64];
+    snprintf(stateTopic, 64, "%%s/%s%s", strip->name, topic);
+    gizmo.publish(stateTopic, (char *) value, true);
+}
+
+
 // Command processors
 void processOnOff(const char *value, Strip *strip) {
     strip->on = !strcmp(value, "on");
+    publishState("/state", strip->on ? "on" : "off", strip);
 }
 
 
@@ -268,11 +272,13 @@ void processColor(const char *value, Strip *strip, boolean turnOn) {
     }
 //    strip->pattern = findPattern("solid");
 //    strip->randomMode = NOT_RANDOM;
+    publishState("/rgb/state", value, strip);
 }
 
 void processBrightness(const char *value, Strip *strip) {
     strip->brightness = atoi(value);
     strip->on = strip->brightness != 0;
+    publishState("/brightness/state", value, strip);
 }
 
 RandomMode randomMode(const char *name) {
@@ -290,6 +296,7 @@ void processEffect(const char *value, Strip *strip, boolean turnOn) {
     } else {
         strip->pattern = randomPattern(strip);
     }
+    publishState("/effect/state", strip->pattern->name, strip);
 }
 
 void processCallback(const char *topic, const char *value, Strip *strip) {
@@ -332,11 +339,7 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
 
     Serial.printf("%s: %s\n", topic, value);
 
-    if (strstr(topic, "/all")) {
-        processCallback(topic, value, &front);
-        processCallback(topic, value, &back);
-        gizmo.schedulePublish("%s/all/state", front.on || back.on ? "on" : "off");
-    } else if (strstr(topic, "/front")) {
+    if (strstr(topic, "/front")) {
         processCallback(topic, value, &front);
     } else if (strstr(topic, "/back")) {
         processCallback(topic, value, &back);
