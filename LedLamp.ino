@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.05.11.001"
+#define SW_VERSION      "2020.07.07.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
