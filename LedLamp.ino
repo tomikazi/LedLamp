@@ -1,22 +1,18 @@
 #include <ESPGizmoDefault.h>
 #include <WiFiUDP.h>
 #include <FS.h>
-
-#include <FastLED.h>
-
 #include <WebSocketsServer.h>
+#include <FastLED.h>
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.07.20.001"
+#define SW_VERSION      "2020.07.21.002"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
 
 #define FRONT_PIN       4
 #define BACK_PIN        5
-
-#define MIC_PIN         A0
 
 #define LED_COUNT               60
 #define LED_TYPE                WS2812B
