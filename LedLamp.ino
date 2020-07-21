@@ -8,7 +8,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.07.15.001"
+#define SW_VERSION      "2020.07.20.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -70,6 +70,7 @@ struct StripRec {
     CRGB *leds;
     Pattern *pattern;
     uint8_t hue;
+    uint8_t count;
     CLEDController *ctl;
     CRGBPalette16 currentPalette;
     CRGBPalette16 targetPalette;
@@ -84,14 +85,14 @@ byte backData[LED_COUNT];
 
 Strip front = {
         .name = "front", .on = true, .color = CRGB::Red, .brightness = BRIGHTNESS,
-        .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL,
+        .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .count = LED_COUNT, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
         .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM,
         .th = 0, .tb = 0, .tp = 0, .t0 = 0, .t1 = 0, .t2 = 0, .t3 = 0, .t4 = 0, .data = frontData
 };
 Strip back = {
         .name = "back", .on = true, .color = CRGB::Green, .brightness = BRIGHTNESS,
-        .leds = &backLeds[0], .pattern = NULL, .hue = 0, .ctl = NULL,
+        .leds = &backLeds[0], .pattern = NULL, .hue = 0, .count = LED_COUNT, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
         .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM,
         .th = 0, .tb = 0, .tp = 0, .t0 = 0, .t1 = 0, .t2 = 0, .t3 = 0, .t4 = 0, .data = backData
@@ -191,13 +192,13 @@ void setup() {
 void setupLED() {
     FastLED.setMaxPowerInVoltsAndMilliamps(5,2400);
 
-    front.ctl = &FastLED.addLeds<LED_TYPE, FRONT_PIN, COLOR_ORDER>(frontLeds, LED_COUNT).setCorrection(TypicalLEDStrip);
-    fadeToBlackBy(frontLeds, LED_COUNT, 255);
+    front.ctl = &FastLED.addLeds<LED_TYPE, FRONT_PIN, COLOR_ORDER>(frontLeds, front.count).setCorrection(TypicalLEDStrip);
+    fadeToBlackBy(frontLeds, front.count, 255);
     front.ctl->showLeds(front.brightness);
     front.pattern = findPattern("glitter");
 
-    back.ctl = &FastLED.addLeds<LED_TYPE, BACK_PIN, COLOR_ORDER>(backLeds, LED_COUNT).setCorrection(TypicalLEDStrip);
-    fadeToBlackBy(backLeds, LED_COUNT, 255);
+    back.ctl = &FastLED.addLeds<LED_TYPE, BACK_PIN, COLOR_ORDER>(backLeds, back.count).setCorrection(TypicalLEDStrip);
+    fadeToBlackBy(backLeds, back.count, 255);
     back.ctl->showLeds(back.brightness);
     back.pattern = findPattern("glitter");
 
@@ -693,7 +694,7 @@ void handleLEDs(Strip *strip) {
                     sleepDimmer < 100 ? (uint8_t)((sleepDimmer * strip->brightness) / 100) : strip->brightness);
         }
     } else {
-        fill_solid(strip->leds, LED_COUNT, strip->on ? strip->color : CRGB::Black);
+        fill_solid(strip->leds, strip->count, strip->on ? strip->color : CRGB::Black);
         strip->leds[0] = WiFi.status() != WL_CONNECTED ? CRGB::Red : strip->leds[0];
         strip->ctl->showLeds(strip->brightness);
     }
@@ -907,6 +908,7 @@ Pattern patterns[] = {
         Pattern{.name = "vibrancy", .renderer = vibrancy, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "pacifica", .renderer = pacifica, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "embers", .renderer = embers, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
+        Pattern{.name = "twinklefairy", .renderer = twinklefairy, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
         Pattern{.name = "twinkleplain", .renderer = twinkleplain, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
         Pattern{.name = "twinklefox", .renderer = twinklefox, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
         Pattern{.name = "fireworks", .renderer = fireworks, .huePause = 20, .renderPause = 2, .soundReactive = false, .favorite = false},

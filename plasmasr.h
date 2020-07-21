@@ -15,7 +15,7 @@ void plasmasr(Strip *s) {
     thatphase += beatsin8(7, -4, 4);
 
     // For each of the LED's in the strand, set a brightness based on a wave as follows.
-    for (int k = 0; k < LED_COUNT; k++) {
+    for (int k = 0; k < s->count; k++) {
         thisbright = cubicwave8((k * 8) + thisphase) / 2;
         // Let's munge the brightness a bit and animate it all with the phases.
         thisbright += cos8((k * 10) + thatphase) / 2;

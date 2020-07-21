@@ -3,7 +3,7 @@
 //static uint16_t sparking = 0;
 
 void splitfiresr(Strip *s) {
-    uint8_t half = LED_COUNT/2;
+    uint8_t half = s->count/2;
 
     EVERY_X_MILLIS(s->t2, 10)
         sparking = map(sampleavg, 0, 255, 0, 100);
@@ -16,7 +16,7 @@ void splitfiresr(Strip *s) {
 
         // Step 1.  Cool down every cell a little
         for (int i = 0; i < half; i++) {
-            s->data[i] = qsub8(s->data[i], random8(0, ((cooling * 10) / LED_COUNT) + 2));
+            s->data[i] = qsub8(s->data[i], random8(0, ((cooling * 10) / s->count) + 2));
         }
 
         // Step 2.  Heat from each cell drifts 'up' and diffuses a little

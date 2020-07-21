@@ -8,13 +8,13 @@ void fillnoise(Strip *s) {
     static int16_t xdist;
     static int16_t ydist;
 
-    // Clip the sampleavg to maximize at LED_COUNT.
-    if (sampleavg > LED_COUNT) {
-        sampleavg = LED_COUNT;
+    // Clip the sampleavg to maximize at s->count.
+    if (sampleavg > s->count) {
+        sampleavg = s->count;
     }
 
     // The louder the sound, the wider the soundbar.
-    for (int i = (LED_COUNT - sampleavg / 2) / 2; i < (LED_COUNT + sampleavg / 2) / 2; i++) {
+    for (int i = (s->count - sampleavg / 2) / 2; i < (s->count + sampleavg / 2) / 2; i++) {
         // Get a value from the noise function. I'm using both x and y axis.
         uint8_t index = inoise8(i * sampleavg + xdist, ydist + i * sampleavg);
         // With that value, look up the 8 bit colour palette value and assign it to the current LED.
@@ -34,5 +34,5 @@ void fillnoise(Strip *s) {
     waveit(s);
 
     // Fade the center, while waveit moves everything out to the edges.
-    fadeToBlackBy(s->leds + LED_COUNT / 2 - 1, 2, 128);
+    fadeToBlackBy(s->leds + s->count / 2 - 1, 2, 128);
 }

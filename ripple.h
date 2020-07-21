@@ -15,11 +15,11 @@ void ripple(Strip *s) {
         step = -1;
     }
 
-    fadeToBlackBy(s->leds, LED_COUNT, 64);
+    fadeToBlackBy(s->leds, s->count, 64);
 
     switch (step) {
         case -1:
-            center = random(LED_COUNT);
+            center = random(s->count);
             colour = (oldsample) % 255; // More peaks/s = higher the hue colour.
             step = 0;
             break;
@@ -35,10 +35,10 @@ void ripple(Strip *s) {
 
         default:                                                                    // Middle of the ripples.
             // A spreading and fading pattern up the strand.
-            s->leds[(center + step + LED_COUNT) % LED_COUNT] +=
+            s->leds[(center + step + s->count) % s->count] +=
                     ColorFromPalette(s->currentPalette, colour, 255 / step * 2, s->currentBlending);
             // A spreading and fading pattern down the strand.
-            s->leds[(center - step + LED_COUNT) % LED_COUNT] +=
+            s->leds[(center - step + s->count) % s->count] +=
                     ColorFromPalette(s->currentPalette, colour, 255 / step * 2, s->currentBlending);
             step++;
             break;

@@ -21,7 +21,7 @@ void onesine(Strip *s) {
 
     colorIndex = millis() >> 4;
 
-    for (int k = 0; k < LED_COUNT; k++) {
+    for (int k = 0; k < s->count; k++) {
         // For each of the LED's in the strand, set a brightness based on a wave as follows:
         // qsub sets a minimum value called thiscutoff. If < thiscutoff, then bright = 0. Otherwise, bright = 128 (as defined in qsub)..
         int thisbright = qsuba(cubicwave8((k * allfreq) + thisphase), thiscutoff);

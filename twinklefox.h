@@ -242,6 +242,13 @@ const TProgmemRGBPalette16 *PlainPaletteList[] = {
         &Snow_p,
 };
 
+// Add or remove palette names from this list to control which color
+// palettes are used, and in what order.
+const TProgmemRGBPalette16 *FairyPaletteList[] = {
+        &FairyLight_p,
+};
+
+
 
 // Add or remove palette names from this list to control which color
 // palettes are used, and in what order.
@@ -249,6 +256,8 @@ const TProgmemRGBPalette16 *EmbersPaletteList[] = {
         &Embers_p,
 };
 
+#define EVERY_X_SECS(T, N)  if (T < millis()) { T = millis() + N*1000;
+#define EVERY_X_MILLIS(T, N)  if (T < millis()) { T = millis() + N;
 
 // Advance to the next color palette in the list (above).
 void chooseNextFestiveColorPalette(CRGBPalette16 &pal) {
@@ -259,13 +268,11 @@ void chooseNextFestiveColorPalette(CRGBPalette16 &pal) {
 }
 
 void twinklefox(Strip *s) {
-    EVERY_N_SECONDS(SECONDS_PER_PALETTE) {
-        if (isMaster(WiFi.localIP())) {
-            chooseNextFestiveColorPalette(s->targetPalette);
-        }
+    EVERY_X_SECS(s->t4, SECONDS_PER_PALETTE)
+        chooseNextFestiveColorPalette(s->targetPalette);
     }
 
-    EVERY_N_MILLISECONDS(10) {
+    EVERY_X_MILLIS(s->t3, 10)
         nblendPaletteTowardPalette(s->currentPalette, s->targetPalette, 12);
     }
 
@@ -280,18 +287,36 @@ void chooseNextPlainColorPalette(CRGBPalette16 &pal) {
 }
 
 void twinkleplain(Strip *s) {
-    EVERY_N_SECONDS(SECONDS_PER_PALETTE) {
-        if (isMaster(WiFi.localIP())) {
-            chooseNextPlainColorPalette(s->targetPalette);
-        }
+    EVERY_X_SECS(s->t4, SECONDS_PER_PALETTE)
+        chooseNextPlainColorPalette(s->targetPalette);
     }
 
-    EVERY_N_MILLISECONDS(10) {
+    EVERY_X_MILLIS(s->t3, 10)
         nblendPaletteTowardPalette(s->currentPalette, s->targetPalette, 12);
     }
 
     drawTwinkles(s);
 }
+
+void chooseNextFairyColorPalette(CRGBPalette16 &pal) {
+    const uint8_t numberOfPalettes = sizeof(FairyPaletteList) / sizeof(PlainPaletteList[0]);
+    static uint8_t whichPalette = -1;
+    whichPalette = addmod8(whichPalette, 1, numberOfPalettes);
+    pal = *(FairyPaletteList[whichPalette]);
+}
+
+void twinklefairy(Strip *s) {
+    EVERY_X_SECS(s->t4, SECONDS_PER_PALETTE)
+        chooseNextFairyColorPalette(s->targetPalette);
+    }
+
+    EVERY_X_MILLIS(s->t3, 10)
+        nblendPaletteTowardPalette(s->currentPalette, s->targetPalette, 12);
+    }
+
+    drawTwinkles(s);
+}
+
 
 void chooseNextEmbersColorPalette(CRGBPalette16 &pal) {
     const uint8_t numberOfPalettes = sizeof(EmbersPaletteList) / sizeof(EmbersPaletteList[0]);
@@ -301,13 +326,11 @@ void chooseNextEmbersColorPalette(CRGBPalette16 &pal) {
 }
 
 void embers(Strip *s) {
-    EVERY_N_SECONDS(3) {
-        if (isMaster(WiFi.localIP())) {
-            chooseNextEmbersColorPalette(s->targetPalette);
-        }
+    EVERY_X_SECS(s->t4, SECONDS_PER_PALETTE)
+        chooseNextEmbersColorPalette(s->targetPalette);
     }
 
-    EVERY_N_MILLISECONDS(10) {
+    EVERY_X_MILLIS(s->t3, 10)
         nblendPaletteTowardPalette(s->currentPalette, s->targetPalette, 12);
     }
 
@@ -350,7 +373,7 @@ void drawTwinkles(Strip *s) {
 
     uint8_t backgroundBrightness = bg.getAverageLight();
 
-    for (int i = 0; i < LED_COUNT; i++) {
+    for (int i = 0; i < s->count; i++) {
         CRGB &pixel = s->leds[i];
         PRNG16 = (uint16_t)(PRNG16 * 2053) + 1384; // next 'random' number
         uint16_t myclockoffset16 = PRNG16; // use that number as clock offset
@@ -370,7 +393,7 @@ void drawTwinkles(Strip *s) {
         if (deltabright >= 32 || (!bg)) {
             // If the new pixel is significantly brighter than the background color,
             // use the new color.
-            pixel = c;
+            pixel = blend(pixel, c, 32);
         } else if (deltabright > 0) {
             // If the new pixel is just slightly brighter than the background color,
             // mix a blend of the new color and the background color
@@ -378,7 +401,7 @@ void drawTwinkles(Strip *s) {
         } else {
             // if the new pixel is not at all brighter than the background color,
             // just use the background color.
-            pixel = bg;
+            pixel = blend(pixel, bg, 32);
         }
     }
 }

@@ -11,12 +11,12 @@
 void fire(Strip *s) {
     EVERY_X_MILLIS(s->t2, 10)
         // Step 1.  Cool down every cell a little
-        for (int i = 0; i < LED_COUNT; i++) {
-            s->data[i] = qsub8(s->data[i], random8(0, ((COOLING * 10) / LED_COUNT) + 2));
+        for (int i = 0; i < s->count; i++) {
+            s->data[i] = qsub8(s->data[i], random8(0, ((COOLING * 10) / s->count) + 2));
         }
 
         // Step 2.  Heat from each cell drifts 'up' and diffuses a little
-        for (int k = LED_COUNT - 1; k >= 2; k--) {
+        for (int k = s->count - 1; k >= 2; k--) {
             s->data[k] = (s->data[k - 1] + s->data[k - 2] + s->data[k - 2]) / 3;
         }
 
@@ -27,7 +27,7 @@ void fire(Strip *s) {
         }
 
         // Step 4.  Map from heat cells to LED colors
-        for (int j = 0; j < LED_COUNT; j++) {
+        for (int j = 0; j < s->count; j++) {
             s->leds[j] = HeatColor(s->data[j]);
         }
     }

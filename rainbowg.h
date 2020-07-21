@@ -8,8 +8,8 @@ void rainbowg(Strip *s) {
 
     //  currentPalette = PartyColors_p;
 
-    for (int i = 0; i < LED_COUNT; i++) {
-        int colorIndex = (beatA + beatB + beatC) / 3 * i * 4 / LED_COUNT;
+    for (int i = 0; i < s->count; i++) {
+        int colorIndex = (beatA + beatB + beatC) / 3 * i * 4 / s->count;
         // Variable brightness
         s->leds[i] = ColorFromPalette(s->currentPalette, colorIndex, sampleavg, s->currentBlending);
     }

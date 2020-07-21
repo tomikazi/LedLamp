@@ -53,7 +53,7 @@ void pacifica(Strip *s) {
     sCIStart4 -= (deltams2 * beatsin88(257, 4, 6));
 
     // Clear out the LED array to a dim background blue-green
-    fill_solid(s->leds, LED_COUNT, CRGB(2, 6, 10));
+    fill_solid(s->leds, s->count, CRGB(2, 6, 10));
 
     // Render each of four layers, with different scales and speeds, that vary over time
     pacifica_one_layer(s, pacifica_palette_1, sCIStart1, beatsin16(3, 11 * 256, 14 * 256), beatsin8(10, 70, 130),
@@ -75,7 +75,7 @@ void pacifica_one_layer(Strip *s, CRGBPalette16 &p, uint16_t cistart, uint16_t w
     uint16_t ci = cistart;
     uint16_t waveangle = ioff;
     uint16_t wavescale_half = (wavescale / 2) + 20;
-    for (uint16_t i = 0; i < LED_COUNT; i++) {
+    for (uint16_t i = 0; i < s->count; i++) {
         waveangle += 250;
         uint16_t s16 = sin16(waveangle) + 32768;
         uint16_t cs = scale16(s16, wavescale_half) + wavescale_half;
@@ -92,7 +92,7 @@ void pacifica_add_whitecaps(Strip *s) {
     uint8_t basethreshold = beatsin8(9, 55, 65);
     uint8_t wave = beat8(7);
 
-    for (uint16_t i = 0; i < LED_COUNT; i++) {
+    for (uint16_t i = 0; i < s->count; i++) {
         uint8_t threshold = scale8(sin8(wave), 20) + basethreshold;
         wave += 7;
         uint8_t l = s->leds[i].getAverageLight();
@@ -106,7 +106,7 @@ void pacifica_add_whitecaps(Strip *s) {
 
 // Deepen the blues and greens
 void pacifica_deepen_colors(Strip *s) {
-    for (uint16_t i = 0; i < LED_COUNT; i++) {
+    for (uint16_t i = 0; i < s->count; i++) {
         s->leds[i].blue = scale8(s->leds[i].blue, 145);
         s->leds[i].green = scale8(s->leds[i].green, 200);
         s->leds[i] |= CRGB(2, 5, 7);

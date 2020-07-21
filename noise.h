@@ -22,7 +22,7 @@ void fillnoise8(Strip *s) {
     static uint16_t dist;
 
     // Just ONE loop to fill up the LED array as all of the pixels change.
-    for(int i = 0; i < LED_COUNT; i++) {
+    for(int i = 0; i < s->count; i++) {
         // Get a value from the noise function. I'm using both x and y axis.
         uint8_t index = inoise8(i*SCALE, dist+i*SCALE);
         // With that value, look up the 8 bit colour palette value and assign it to the current LED.

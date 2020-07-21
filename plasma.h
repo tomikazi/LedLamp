@@ -30,7 +30,7 @@ void doPlasma(Strip *s) {
     int thatPhase = beatsin8(7, -64, 64);
 
     // For each of the LED's in the strand, set a brightness based on a wave as follows:
-    for (int k = 0; k < LED_COUNT; k++) {
+    for (int k = 0; k < s->count; k++) {
         // Create a wave and add a phase change and add another wave with its own phase change.. Hey, you can even change the frequencies if you wish.
         int colorIndex = cubicwave8((k * 23) + thisPhase) / 2 + cos8((k * 15) + thatPhase) / 2;
         // qsub gives it a bit of 'black' dead space by setting sets a minimum value. If colorIndex < current value of beatsin8(), then bright = 0. Otherwise, bright = colorIndex..

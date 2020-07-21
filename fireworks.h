@@ -43,7 +43,7 @@ void fireworks(Strip *s) {
 }
 
 void fireworksWait(Strip *s) {
-    fill_solid(s->leds, LED_COUNT, CRGB::Black);
+    fill_solid(s->leds, s->count, CRGB::Black);
 
     EVERY_X_MILLIS(s->t2, random16(500, 5000))
         stage = LAUNCH_STAGE;
@@ -63,7 +63,7 @@ void fireworksLaunch(Strip *s) {
         sparkCol[i] = constrain(sparkCol[i], 32, 255);
     } // launch
 
-    fill_solid(s->leds, LED_COUNT, CRGB::Black);
+    fill_solid(s->leds, s->count, CRGB::Black);
 
     stage = FLARE_STAGE;
 }
@@ -74,12 +74,12 @@ void fireworksFlare(Strip *s) {
         return;
     }
 
-    fill_solid(s->leds, LED_COUNT, CRGB::Black);
+    fill_solid(s->leds, s->count, CRGB::Black);
 
     // sparks
     for (int i = 0; i < NUM_LAUNCH_SPARKS; i++) {
         sparkPos[i] += sparkVel[i];
-        sparkPos[i] = constrain(sparkPos[i], 0, LED_COUNT);
+        sparkPos[i] = constrain(sparkPos[i], 0, s->count);
         sparkVel[i] += gravity;
         sparkCol[i] += -.98;
         sparkCol[i] = constrain(sparkCol[i], 32, 255);
@@ -91,7 +91,7 @@ void fireworksFlare(Strip *s) {
     s->leds[int(flarePos)] = CHSV(0, 0, int(brightness * 255));
 
     flarePos += flareVel;
-    flarePos = constrain(flarePos, 0, LED_COUNT);
+    flarePos = constrain(flarePos, 0, s->count);
     flareVel += gravity;
     brightness *= .985;
 }
@@ -105,13 +105,13 @@ void fireworksExplode(Strip *s) {
         sparkVel[i] = (float(random16(0, 20000)) / 10000.0) - 1.0;
         sparkCol[i] = abs(sparkVel[i]) * 300; // set colors before scaling velocity to keep them bright
         sparkCol[i] = constrain(sparkCol[i], 128, 255);
-        sparkVel[i] *= (flarePos / 8) / LED_COUNT; // proportional to height
+        sparkVel[i] *= (flarePos / 8) / s->count; // proportional to height
     }
 
     sparkCol[0] = 255; // this will be our known spark
     dying_gravity = gravity;
 
-    fill_solid(s->leds, LED_COUNT, CRGB::Black);
+    fill_solid(s->leds, s->count, CRGB::Black);
 
     stage = FADE_STAGE;
 }
@@ -126,11 +126,11 @@ void fireworksFade(Strip *s) {
         return;
     }
 
-    fill_solid(s->leds, LED_COUNT, CRGB::Black);
+    fill_solid(s->leds, s->count, CRGB::Black);
 
     for (int i = 0; i < nSparks; i++) {
         sparkPos[i] += sparkVel[i];
-        sparkPos[i] = constrain(sparkPos[i], 0, LED_COUNT);
+        sparkPos[i] = constrain(sparkPos[i], 0, s->count);
         sparkVel[i] += dying_gravity;
         sparkCol[i] *= .99;
         sparkCol[i] = constrain(sparkCol[i], 0, 255); // red cross dissolve
