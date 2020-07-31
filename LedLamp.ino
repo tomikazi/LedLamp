@@ -6,7 +6,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.07.21.002"
+#define SW_VERSION      "2020.07.31.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -690,7 +690,7 @@ void handleLEDs(Strip *strip) {
                     sleepDimmer < 100 ? (uint8_t)((sleepDimmer * strip->brightness) / 100) : strip->brightness);
         }
     } else {
-        fill_solid(strip->leds, strip->count, strip->on ? strip->color : CRGB::Black);
+        blend(strip, strip->on ? strip->color : CRGB::Black, 0, strip->count);
         strip->leds[0] = WiFi.status() != WL_CONNECTED ? CRGB::Red : strip->leds[0];
         strip->ctl->showLeds(strip->brightness);
     }
