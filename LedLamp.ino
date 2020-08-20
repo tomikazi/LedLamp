@@ -6,7 +6,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.07.31.001"
+#define SW_VERSION      "2020.08.20.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -340,6 +340,7 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {
     if (strstr(topic, "/all")) {
         front.on = back.on = !strcmp(value, "on");
         gizmo.schedulePublish("%s/all/state", front.on ? "on" : "off");
+        saveState();
 
     } else if (strstr(topic, "/front")) {
         processCallback(topic, value, &front);
@@ -786,6 +787,10 @@ void finishWiFiConnect() {
     determineMaster();
     sayHello();
     requestSamples();
+
+    publishState("/state", front.on ? "on" : "off", &front);
+    publishState("/state", back.on ? "on" : "off", &back);
+    gizmo.publish("%s/all/state", front.on || back.on ? "on" : "off", true);
 
     Serial.printf("%s is ready\n", LED_LIGHTS);
 }
