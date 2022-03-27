@@ -22,26 +22,6 @@ static float dying_gravity;
 #define FADE_STAGE      4
 static uint8_t stage = WAIT_STAGE;
 
-void fireworks(Strip *s) {
-    switch (stage) {
-        case LAUNCH_STAGE:
-            fireworksLaunch(s);
-            break;
-        case FLARE_STAGE:
-            fireworksFlare(s);
-            break;
-        case EXPLODE_STAGE:
-            fireworksExplode(s);
-            break;
-        case FADE_STAGE:
-            fireworksFade(s);
-            break;
-        default:
-            fireworksWait(s);
-            break;
-    }
-}
-
 void fireworksWait(Strip *s) {
     fill_solid(s->leds, s->count, CRGB::Black);
 
@@ -149,4 +129,24 @@ void fireworksFade(Strip *s) {
     dying_gravity *= .70; // as sparks burn out they fall slower
 
     s->leds[0] = CRGB::Black;
+}
+
+void fireworks(Strip *s) {
+    switch (stage) {
+        case LAUNCH_STAGE:
+            fireworksLaunch(s);
+            break;
+            case FLARE_STAGE:
+                fireworksFlare(s);
+                break;
+                case EXPLODE_STAGE:
+                    fireworksExplode(s);
+                    break;
+                    case FADE_STAGE:
+                        fireworksFade(s);
+                        break;
+                        default:
+                            fireworksWait(s);
+                            break;
+    }
 }

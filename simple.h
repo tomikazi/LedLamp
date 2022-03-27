@@ -9,6 +9,12 @@ void test(Strip *s) {
     s->leds[s->count - 1] = CRGB::Red;
 }
 
+void addGlitter(Strip *s, fract8 chanceOfGlitter) {
+    if (random8() < chanceOfGlitter) {
+        s->leds[random16(s->count)] += CRGB::White;
+    }
+}
+
 void glitter(Strip *s) {
     fadeToBlackBy(s->leds, s->count, 20);
     addGlitter(s, 80);
@@ -21,12 +27,6 @@ void rainbow(Strip *s) {
 void rainbowWithGlitter(Strip *s) {
     rainbow(s);
     addGlitter(s, 80);
-}
-
-void addGlitter(Strip *s, fract8 chanceOfGlitter) {
-    if (random8() < chanceOfGlitter) {
-        s->leds[random16(s->count)] += CRGB::White;
-    }
 }
 
 // Send the pixels one or the other direction down the line.

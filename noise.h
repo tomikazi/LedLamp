@@ -1,6 +1,21 @@
 
 #define SCALE 30
 
+void fillnoise8(Strip *s) {
+    // A random number for our noise generator.
+    static uint16_t dist;
+
+    // Just ONE loop to fill up the LED array as all of the pixels change.
+    for(int i = 0; i < s->count; i++) {
+        // Get a value from the noise function. I'm using both x and y axis.
+        uint8_t index = inoise8(i*SCALE, dist+i*SCALE);
+        // With that value, look up the 8 bit colour palette value and assign it to the current LED.
+        s->leds[i] = ColorFromPalette(s->currentPalette, index, 255, s->currentBlending);
+    }
+    // Moving along the distance (that random number we started out with). Vary it a bit with a sine wave.
+    dist += beatsin8(10,1, 4);
+}
+
 void noise(Strip *s) {
     EVERY_X_MILLIS(s->t2, 10)
         // Blend towards the target palette over 48 iterations
@@ -15,19 +30,4 @@ void noise(Strip *s) {
                                          CHSV(random8(), 192, random8(128,255)),
                                          CHSV(random8(), 255, random8(128,255)));
     }
-}
-
-void fillnoise8(Strip *s) {
-    // A random number for our noise generator.
-    static uint16_t dist;
-
-    // Just ONE loop to fill up the LED array as all of the pixels change.
-    for(int i = 0; i < s->count; i++) {
-        // Get a value from the noise function. I'm using both x and y axis.
-        uint8_t index = inoise8(i*SCALE, dist+i*SCALE);
-        // With that value, look up the 8 bit colour palette value and assign it to the current LED.
-        s->leds[i] = ColorFromPalette(s->currentPalette, index, 255, s->currentBlending);
-    }
-    // Moving along the distance (that random number we started out with). Vary it a bit with a sine wave.
-    dist += beatsin8(10,1, 4);
 }

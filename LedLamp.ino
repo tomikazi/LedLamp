@@ -156,6 +156,31 @@ uint32_t lastSample = 0;
 uint32_t sleepTime = 0;
 uint32_t sleepDimmer = 100;
 
+#define EVERY_X_MILLIS(T, N)  if (T < millis()) { T = millis() + N;
+
+// LED Patterns
+#include "simple.h"
+#include "fire.h"
+#include "noise.h"
+#include "plasma.h"
+#include "blendwave.h"
+#include "dotBeat.h"
+#include "pixels.h"
+#include "ripple.h"
+#include "matrix.h"
+#include "pixel.h"
+#include "onesine.h"
+#include "rainbowg.h"
+#include "besin.h"
+#include "fillnoise.h"
+#include "plasmasr.h"
+#include "rainbowbit.h"
+#include "firesr.h"
+#include "splitfiresr.h"
+#include "pacifica.h"
+#include "twinklefox.h"
+#include "fireworks.h"
+
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL, onUpdate);
@@ -665,8 +690,6 @@ void handlePeer(Command command) {
 }
 
 
-#define EVERY_X_MILLIS(T, N)  if (T < millis()) { T = millis() + N;
-
 void handleLEDs(Strip *strip) {
     if (strip->on && strip->pattern) {
         uint32_t renderPause = strip->pattern->renderPause > 0 ? strip->pattern->renderPause : -strip->pattern->renderPause;
@@ -865,29 +888,6 @@ void saveState() {
     }
 }
 
-
-// LED Patterns
-#include "simple.h"
-#include "fire.h"
-#include "noise.h"
-#include "plasma.h"
-#include "blendwave.h"
-#include "dotBeat.h"
-#include "pixels.h"
-#include "ripple.h"
-#include "matrix.h"
-#include "pixel.h"
-#include "onesine.h"
-#include "rainbowg.h"
-#include "besin.h"
-#include "fillnoise.h"
-#include "plasmasr.h"
-#include "rainbowbit.h"
-#include "firesr.h"
-#include "splitfiresr.h"
-#include "pacifica.h"
-#include "twinklefox.h"
-#include "fireworks.h"
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
