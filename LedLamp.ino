@@ -6,7 +6,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2020.08.20.001"
+#define SW_VERSION      "2022.04.04.004"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -156,6 +156,7 @@ uint32_t lastSample = 0;
 uint32_t sleepTime = 0;
 uint32_t sleepDimmer = 100;
 
+#define STARTUP_MILLIS  20000
 #define EVERY_X_MILLIS(T, N)  if (T < millis()) { T = millis() + N;
 
 // LED Patterns
@@ -287,21 +288,26 @@ CRGB colorFromCSV(const char *csv) {
 }
 
 void processColor(const char *value, Strip *strip, boolean turnOn) {
-    strip->on = turnOn;
+    if (millis() > STARTUP_MILLIS) {
+        strip->on = turnOn;
+    }
     if (value[0] == '#') {
         strip->color = colorFromCSS(value);
     } else {
         strip->color = colorFromCSV(value);
     }
-//    strip->pattern = findPattern("solid");
-//    strip->randomMode = NOT_RANDOM;
     publishState("/rgb/state", value, strip);
 }
 
 void processBrightness(const char *value, Strip *strip) {
     strip->brightness = atoi(value);
-    strip->on = strip->brightness != 0;
+    if (millis() > STARTUP_MILLIS) {
+        strip->on = strip->brightness != 0;
+    }
     publishState("/brightness/state", value, strip);
+    if (strip->on && strip->brightness == 0) {
+        processOnOff("off", strip);
+    }
 }
 
 RandomMode randomMode(const char *name) {
@@ -312,7 +318,9 @@ RandomMode randomMode(const char *name) {
 }
 
 void processEffect(const char *value, Strip *strip, boolean turnOn) {
-    strip->on = turnOn;
+    if (millis() > STARTUP_MILLIS) {
+        strip->on = turnOn;
+    }
     strip->randomMode = randomMode(value);
     if (strip->randomMode == NOT_RANDOM) {
         strip->pattern = findPattern(value);
