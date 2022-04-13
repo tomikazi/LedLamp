@@ -6,7 +6,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2022.04.04.004"
+#define SW_VERSION      "2022.04.12.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -80,14 +80,14 @@ byte frontData[LED_COUNT];
 byte backData[LED_COUNT];
 
 Strip front = {
-        .name = "front", .on = true, .color = CRGB::Red, .brightness = BRIGHTNESS,
+        .name = "front", .on = true, .color = CRGB::Orange, .brightness = BRIGHTNESS,
         .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .count = LED_COUNT, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
         .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM,
         .th = 0, .tb = 0, .tp = 0, .t0 = 0, .t1 = 0, .t2 = 0, .t3 = 0, .t4 = 0, .data = frontData
 };
 Strip back = {
-        .name = "back", .on = true, .color = CRGB::Green, .brightness = BRIGHTNESS,
+        .name = "back", .on = true, .color = CRGB::Red, .brightness = BRIGHTNESS,
         .leds = &backLeds[0], .pattern = NULL, .hue = 0, .count = LED_COUNT, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
         .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM,
@@ -793,10 +793,10 @@ void handleSamples() {
 
 void loop() {
     if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
-        wsServer.loop();
         handlePeers();
         handleSamples();
     }
+    wsServer.loop();
 
     EVERY_N_SECONDS(1)
     {
@@ -848,8 +848,8 @@ void loadState() {
         f.close();
 
     } else {
-        front.pattern = findPattern("confetti");
-        back.pattern = findPattern("cycle");
+        front.pattern = findPattern("gradient");
+        back.pattern = findPattern("vibrancy");
         syncWithMaster = true;
     }
 }
