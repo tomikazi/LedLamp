@@ -6,7 +6,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2022.04.12.001"
+#define SW_VERSION      "2022.05.18.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -185,8 +185,6 @@ uint32_t sleepDimmer = 100;
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL, onUpdate);
-
-//    gizmo.debugEnabled = true;
 
     gizmo.httpServer()->on("/on", handleOn);
     gizmo.httpServer()->on("/off", handleOff);
