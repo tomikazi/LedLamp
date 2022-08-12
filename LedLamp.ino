@@ -6,7 +6,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2022.05.18.001"
+#define SW_VERSION      "2022.08.11.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -21,12 +21,15 @@
 #define FRAMES_PER_SECOND       60
 
 #define BUDDY_PORT  7001
+uint16_t buddyPort = BUDDY_PORT;
 WiFiUDP buddy;
 
 #define PEER_PORT  7003
+uint16_t peerPort = PEER_PORT;
 WiFiUDP peer;
 
 #define GROUP_PORT  7002
+uint16_t groupPort = GROUP_PORT;
 WiFiUDP group;
 IPAddress groupIp(224, 0, 42, 69);
 
@@ -188,6 +191,7 @@ void setup() {
 
     gizmo.httpServer()->on("/on", handleOn);
     gizmo.httpServer()->on("/off", handleOff);
+    gizmo.httpServer()->on("/ports", handlePorts);
     gizmo.setupWebRoot();
     setupWebSocket();
 
@@ -206,6 +210,7 @@ void setup() {
     gizmo.addTopic("%s/back/effect");
 
     setupLED();
+    loadPorts();
     gizmo.endSetup();
 }
 
@@ -245,6 +250,33 @@ void handleOff() {
     processCallback("/power", "off", &back);
     server->send(200, "text/plain", "off\n");
 }
+
+void handlePorts() {
+    ESP8266WebServer *server = gizmo.httpServer();
+    char port[8];
+    if (server->hasArg("buddy")) {
+        strncpy(port, server->arg("buddy").c_str(), 7);
+        buddyPort = atoi(port);
+    }
+
+    if (server->hasArg("peer")) {
+        strncpy(port, server->arg("peer").c_str(), 7);
+        peerPort = atoi(port);
+    }
+
+    if (server->hasArg("group")) {
+        strncpy(port, server->arg("group").c_str(), 7);
+        groupPort = atoi(port);
+    }
+
+    savePorts();
+
+    char resp[64];
+    snprintf(resp, 63, "buddy=%d\npeer=%d\ngroup=%d\n", buddyPort, peerPort, groupPort);
+    server->send(200, "text/plain", resp);
+    gizmo.scheduleRestart();
+}
+
 
 void publishState(const char *topic, const char *value, Strip *strip) {
     char stateTopic[64];
@@ -459,17 +491,17 @@ void unicast(uint32_t ip, uint16_t port, Command command) {
 }
 
 void broadcast(Command command) {
-    group.beginPacketMulticast(groupIp, GROUP_PORT, WiFi.localIP());
+    group.beginPacketMulticast(groupIp, groupPort, WiFi.localIP());
     group.write((char *) &command, sizeof(command));
     group.endPacket();
 
     if (buddyAvailable && buddyIp) {
-        unicast(buddyIp, PEER_PORT, command);
+        unicast(buddyIp, peerPort, command);
     }
 
     for (int i = 1; i < MAX_PEERS; i++) {
         if (peers[i].ip && peers[i].lastHeard) {
-            unicast(peers[i].ip, PEER_PORT, command);
+            unicast(peers[i].ip, peerPort, command);
         }
     }
 }
@@ -809,9 +841,9 @@ void finishWiFiConnect() {
     peers[0].ip = (uint32_t) WiFi.localIP();
     strcpy(peers[0].name, gizmo.getHostname());
 
-    buddy.begin(BUDDY_PORT);
-    peer.begin(PEER_PORT);
-    group.beginMulticast(WiFi.localIP(), groupIp, GROUP_PORT);
+    buddy.begin(buddyPort);
+    peer.begin(peerPort);
+    group.beginMulticast(WiFi.localIP(), groupIp, groupPort);
 
     determineMaster();
     sayHello();
@@ -1028,5 +1060,31 @@ void saveFavorites() {
             i++;
         }
         f.close();
+    }
+}
+
+void savePorts() {
+    File f = SPIFFS.open("/ports", "w");
+    if (f) {
+        f.printf("%d|%d|%d\n", buddyPort, peerPort, groupPort);
+        f.close();
+    }
+}
+
+void loadPorts() {
+    File f = SPIFFS.open(normalizeFile("ports"), "r");
+    if (f) {
+        char num[8];
+        int l = f.readBytesUntil('|', num, 8);
+        num[l] = '\0';
+        buddyPort = atoi(num);
+
+        l = f.readBytesUntil('\n', num, 8);
+        num[l] = '\0';
+        peerPort = atoi(num);
+
+        l = f.readBytesUntil('\n', num, 8);
+        num[l] = '\0';
+        groupPort = atoi(num);
     }
 }
