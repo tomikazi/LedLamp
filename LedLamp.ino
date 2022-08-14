@@ -3,10 +3,11 @@
 #include <FS.h>
 #include <WebSocketsServer.h>
 #include <FastLED.h>
+#include <LampSync.h>
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2022.08.11.001"
+#define SW_VERSION      "2022.08.14.010"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -19,19 +20,6 @@
 #define COLOR_ORDER             GRB
 #define BRIGHTNESS              96
 #define FRAMES_PER_SECOND       60
-
-#define BUDDY_PORT  7001
-uint16_t buddyPort = BUDDY_PORT;
-WiFiUDP buddy;
-
-#define PEER_PORT  7003
-uint16_t peerPort = PEER_PORT;
-WiFiUDP peer;
-
-#define GROUP_PORT  7002
-uint16_t groupPort = GROUP_PORT;
-WiFiUDP group;
-IPAddress groupIp(224, 0, 42, 69);
 
 CRGB frontLeds[LED_COUNT];
 CRGB backLeds[LED_COUNT];
@@ -99,54 +87,6 @@ Strip back = {
 
 static WebSocketsServer wsServer(81);
 
-typedef struct {
-    uint16_t sampleavg;
-    uint16_t samplepeak;
-    uint16_t oldsample;
-} MicSample;
-
-#define PEER_TIMEOUT   20000
-
-#define MAX_PEERS   5
-typedef struct {
-    uint32_t ip;
-    uint32_t lastHeard;
-    char name[64];
-} Peer;
-
-Peer peers[MAX_PEERS];
-uint8_t master = 0;
-
-boolean syncWithMaster = true;
-boolean buddyAvailable = false;
-boolean buddySilent = false;
-uint32_t buddyTimestamp = 0;
-uint32_t buddyIp = 0;
-
-boolean hadBuddyAndPeer = false;
-
-#define GROUP_MASK      0x01000
-#define FRONT_CTX       (0x0001 | GROUP_MASK)
-#define BACK_CTX        (0x0002 | GROUP_MASK)
-#define ALL_CTX         (FRONT_CTX | BACK_CTX)
-
-#define HELLO           001
-
-#define SAMPLE_REQ      100
-#define SAMPLE_ADV      101
-
-#define SYNC_REQ        200
-#define PATTERN         201
-#define COLORS          202
-
-#define MAX_CMD_DATA    64
-typedef struct {
-    uint32_t src;
-    uint16_t ctx;
-    uint16_t op;
-    uint8_t data[MAX_CMD_DATA];
-} Command;
-
 // Sample average, max and peak detection
 uint16_t sampleavg = 0;
 uint16_t samplepeak = 0;
@@ -191,7 +131,7 @@ void setup() {
 
     gizmo.httpServer()->on("/on", handleOn);
     gizmo.httpServer()->on("/off", handleOff);
-    gizmo.httpServer()->on("/ports", handlePorts);
+    gizmo.httpServer()->on("/channel", handleChannel);
     gizmo.setupWebRoot();
     setupWebSocket();
 
@@ -210,7 +150,6 @@ void setup() {
     gizmo.addTopic("%s/back/effect");
 
     setupLED();
-    loadPorts();
     gizmo.endSetup();
 }
 
@@ -249,32 +188,6 @@ void handleOff() {
     processCallback("/power", "off", &front);
     processCallback("/power", "off", &back);
     server->send(200, "text/plain", "off\n");
-}
-
-void handlePorts() {
-    ESP8266WebServer *server = gizmo.httpServer();
-    char port[8];
-    if (server->hasArg("buddy")) {
-        strncpy(port, server->arg("buddy").c_str(), 7);
-        buddyPort = atoi(port);
-    }
-
-    if (server->hasArg("peer")) {
-        strncpy(port, server->arg("peer").c_str(), 7);
-        peerPort = atoi(port);
-    }
-
-    if (server->hasArg("group")) {
-        strncpy(port, server->arg("group").c_str(), 7);
-        groupPort = atoi(port);
-    }
-
-    savePorts();
-
-    char resp[64];
-    snprintf(resp, 63, "buddy=%d\npeer=%d\ngroup=%d\n", buddyPort, peerPort, groupPort);
-    server->send(200, "text/plain", resp);
-    gizmo.scheduleRestart();
 }
 
 
@@ -479,59 +392,37 @@ void broadcastState(boolean all) {
 
 void onUpdate() {
     // Suppress samples and switch to glitter
-    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = SAMPLE_REQ, .data = {[0] = 0}});
+    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = CHOP(SAMPLE_REQ), .data = {[0] = 0}});
     processEffect((char *) "plasma", &front, true);
     processEffect((char *) "cycle", &back, true);
 }
 
-void unicast(uint32_t ip, uint16_t port, Command command) {
-    peer.beginPacket(ip, port);
-    peer.write((char *) &command, sizeof(command));
-    peer.endPacket();
-}
-
-void broadcast(Command command) {
-    group.beginPacketMulticast(groupIp, groupPort, WiFi.localIP());
-    group.write((char *) &command, sizeof(command));
-    group.endPacket();
-
-    if (buddyAvailable && buddyIp) {
-        unicast(buddyIp, peerPort, command);
-    }
-
-    for (int i = 1; i < MAX_PEERS; i++) {
-        if (peers[i].ip && peers[i].lastHeard) {
-            unicast(peers[i].ip, peerPort, command);
-        }
-    }
-}
-
 void requestSync() {
-    broadcast({.src = peers[0].ip, .ctx = ALL_CTX, .op = SYNC_REQ, .data = {[0] = 0}});
+    broadcast({.src = peers[0].ip, .ctx = ALL_CTX, .op = CHOP(SYNC_REQ), .data = {[0] = 0}});
 };
 
 void requestSamples() {
     boolean needSamples = (back.on && back.brightness && back.pattern && back.pattern->soundReactive) ||
                           (front.on && front.brightness && front.pattern && front.pattern->soundReactive);
-    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = SAMPLE_REQ, .data = {[0] = needSamples}});
+    broadcast({.src = (uint32_t) WiFi.localIP(), .ctx = ALL_CTX, .op = CHOP(SAMPLE_REQ), .data = {[0] = needSamples}});
 }
 
 void sayHello() {
-    Command cmd = {.src = peers[0].ip, .ctx = GROUP_MASK, .op = HELLO, .data = {[0] = 0}};
+    Command cmd = {.src = peers[0].ip, .ctx = GROUP_MASK, .op = CHOP(HELLO), .data = {[0] = 0}};
     strncat((char *) cmd.data, peers[0].name, MAX_CMD_DATA);
     broadcast(cmd);
 }
 
 void syncPattern(Strip *s) {
     uint16_t ctx = s == &front ? FRONT_CTX : BACK_CTX;
-    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = PATTERN, .data = {[0] = 0}};
+    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = CHOP(PATTERN), .data = {[0] = 0}};
     strncat((char *) cmd.data, s->pattern->name, MAX_CMD_DATA);
     broadcast(cmd);
 }
 
 void syncColorSettings(Strip *s) {
     uint16_t ctx = s == &front ? FRONT_CTX : BACK_CTX;
-    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = COLORS, .data = {[0] = 0}};
+    Command cmd = {.src = (uint32_t) WiFi.localIP(), .ctx = ctx, .op = CHOP(COLORS), .data = {[0] = 0}};
     cmd.data[0] = s->on;
     cmd.data[1] = s->hue;
     cmd.data[2] = s->brightness;
@@ -550,46 +441,6 @@ void syncColorSettings(Strip *s) {
     broadcast(cmd);
 }
 
-
-void addPeer(uint32_t ip, char *name) {
-    int ai = 0;
-    for (int i = 1; i < MAX_PEERS; i++) {
-        if (ip == peers[i].ip) {
-            peers[i].lastHeard = millis() + PEER_TIMEOUT;
-            return;
-        } else if (!ai && !peers[i].ip) {
-            ai = i;
-        }
-    }
-    if (ai) {
-        peers[ai].ip = ip;
-        peers[ai].lastHeard = millis() + PEER_TIMEOUT;
-        strcpy(peers[ai].name, name);
-        gizmo.debug("Peer %s discovered", IPAddress(ip).toString().c_str());
-    }
-}
-
-boolean hasPotentialMaster() {
-    for (int i = 1; i < MAX_PEERS; i++) {
-        if (peers[i].ip && peers[0].ip > peers[i].ip) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void determineMaster() {
-    master = 0;
-    for (int i = 1; syncWithMaster && i < MAX_PEERS; i++) {
-        if (peers[i].ip && peers[master].ip > peers[i].ip) {
-            master = i;
-        }
-    }
-}
-
-boolean isMaster(IPAddress ip) {
-    return peers[master].ip == (uint32_t) ip;
-}
 
 void copyPattern(Command command) {
     if (isMaster(command.src)) {
@@ -658,8 +509,7 @@ void prunePeers() {
 }
 
 void handlePeers() {
-    EVERY_N_SECONDS(3)
-    {
+    EVERY_N_SECONDS(3) {
         prunePeers();
         sayHello();
         requestSamples();
@@ -686,8 +536,11 @@ void handlePeers() {
 }
 
 void handlePeer(Command command) {
-    if (command.src != (uint32_t) WiFi.localIP()) {
-        switch (command.op) {
+    uint8_t ch = CH(command.op);
+    uint16_t op = OP(command.op);
+
+    if (command.src != (uint32_t) WiFi.localIP() && ch == channel) {
+        switch (op) {
             case HELLO:
                 if (command.ctx & GROUP_MASK) {
                     addPeer(command.src, (char *) command.data);
@@ -841,9 +694,7 @@ void finishWiFiConnect() {
     peers[0].ip = (uint32_t) WiFi.localIP();
     strcpy(peers[0].name, gizmo.getHostname());
 
-    buddy.begin(buddyPort);
-    peer.begin(peerPort);
-    group.beginMulticast(WiFi.localIP(), groupIp, groupPort);
+    setupSync();
 
     determineMaster();
     sayHello();
@@ -1063,28 +914,3 @@ void saveFavorites() {
     }
 }
 
-void savePorts() {
-    File f = SPIFFS.open("/ports", "w");
-    if (f) {
-        f.printf("%d|%d|%d\n", buddyPort, peerPort, groupPort);
-        f.close();
-    }
-}
-
-void loadPorts() {
-    File f = SPIFFS.open(normalizeFile("ports"), "r");
-    if (f) {
-        char num[8];
-        int l = f.readBytesUntil('|', num, 8);
-        num[l] = '\0';
-        buddyPort = atoi(num);
-
-        l = f.readBytesUntil('\n', num, 8);
-        num[l] = '\0';
-        peerPort = atoi(num);
-
-        l = f.readBytesUntil('\n', num, 8);
-        num[l] = '\0';
-        groupPort = atoi(num);
-    }
-}
