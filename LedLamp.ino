@@ -7,7 +7,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2022.08.14.010"
+#define SW_VERSION      "2022.09.23.005"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -275,11 +275,11 @@ void processEffect(const char *value, Strip *strip, boolean turnOn) {
 
 void processCallback(const char *topic, const char *value, Strip *strip) {
     if (strstr(topic, "/rgb")) {
-        processColor(value, strip, true);
+        processColor(value, strip, strip->on);
     } else if (strstr(topic, "/brightness")) {
         processBrightness(value, strip);
     } else if (strstr(topic, "/effect")) {
-        processEffect(value, strip, true);
+        processEffect(value, strip, strip->on);
     } else if (strstr(topic, "/fav")) {
         strip->pattern->favorite = !strip->pattern->favorite;
         saveFavorites();
