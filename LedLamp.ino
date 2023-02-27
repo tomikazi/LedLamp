@@ -3,7 +3,7 @@
 #include <FS.h>
 #include <WebSocketsServer.h>
 #include <FastLED.h>
-#include <LampSync.h>
+#include "../../FxStreamer/LampSync.h"
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
@@ -587,6 +587,7 @@ void handlePeer(Command command) {
                         pon = command.data[0];
                     }
                 }
+                break;
             default:
                 break;
         }
