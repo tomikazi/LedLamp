@@ -7,7 +7,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2023.02.27.001"
+#define SW_VERSION      "2023.02.27.002"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -74,7 +74,7 @@ Strip front = {
         .name = "front", .on = true, .color = CRGB::Orange, .brightness = BRIGHTNESS,
         .leds = &frontLeds[0], .pattern = NULL, .hue = 0, .count = LED_COUNT, .ctl = NULL,
         .currentPalette = CRGBPalette16(PartyColors_p), .targetPalette = CRGBPalette16(PartyColors_p),
-        .currentBlending = LINEARBLEND, .randomMode = NOT_RANDOM,
+        .currentBlending = LINEARBLEND, .randomMode = FAVORITES,
         .th = 0, .tb = 0, .tp = 0, .t0 = 0, .t1 = 0, .t2 = 0, .t3 = 0, .t4 = 0, .data = frontData
 };
 Strip back = {
@@ -124,6 +124,7 @@ uint32_t sleepDimmer = 100;
 #include "pacifica.h"
 #include "twinklefox.h"
 #include "fireworks.h"
+#include "murica.h"
 
 void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
@@ -159,12 +160,12 @@ void setupLED() {
     front.ctl = &FastLED.addLeds<LED_TYPE, FRONT_PIN, COLOR_ORDER>(frontLeds, front.count).setCorrection(TypicalLEDStrip);
     fadeToBlackBy(frontLeds, front.count, 255);
     front.ctl->showLeds(front.brightness);
-    front.pattern = findPattern("glitter");
+    front.pattern = findPattern("gradient");
 
     back.ctl = &FastLED.addLeds<LED_TYPE, BACK_PIN, COLOR_ORDER>(backLeds, back.count).setCorrection(TypicalLEDStrip);
     fadeToBlackBy(backLeds, back.count, 255);
     back.ctl->showLeds(back.brightness);
-    back.pattern = findPattern("glitter");
+    back.pattern = findPattern("cycle");
 
     loadState();
     loadFavorites();
@@ -493,7 +494,7 @@ void prunePeers() {
     }
     determineMaster();
 
-    if (buddyTimestamp && buddyTimestamp < millis()) {
+    if (buddyTimestamp < millis()) {
         buddyAvailable = false;
         buddySilent = true;
         buddyTimestamp = 0;
@@ -742,7 +743,8 @@ void loadState() {
 
     } else {
         front.pattern = findPattern("gradient");
-        back.pattern = findPattern("vibrancy");
+        back.pattern = findPattern("cycle");
+        front.randomMode = FAVORITES;
         syncWithMaster = true;
     }
 }
@@ -801,15 +803,16 @@ Pattern patterns[] = {
         Pattern{.name = "sinelon", .renderer = sinelon, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "juggle", .renderer = juggle, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "bpm", .renderer = bpm, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
-        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "fire", .renderer = fire, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = true},
         Pattern{.name = "noise", .renderer = noise, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "blendwave", .renderer = blendwave, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "dotbeat", .renderer = dotBeat, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
-        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
-        Pattern{.name = "gradient", .renderer = gradient, .huePause = 200, .renderPause = 20, .soundReactive = false, .favorite = false},
+        Pattern{.name = "plasma", .renderer = plasma, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = true},
+        Pattern{.name = "gradient", .renderer = gradient, .huePause = 200, .renderPause = 20, .soundReactive = false, .favorite = true},
         Pattern{.name = "vibrancy", .renderer = vibrancy, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
-        Pattern{.name = "pacifica", .renderer = pacifica, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
-        Pattern{.name = "embers", .renderer = embers, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
+        Pattern{.name = "pacifica", .renderer = pacifica, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = true},
+        Pattern{.name = "murica", .renderer = murica, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = true},
+        Pattern{.name = "embers", .renderer = embers, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = true},
         Pattern{.name = "twinklefairy", .renderer = twinklefairy, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
         Pattern{.name = "twinkleplain", .renderer = twinkleplain, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
         Pattern{.name = "twinklefox", .renderer = twinklefox, .huePause = 20, .renderPause = -10, .soundReactive = false, .favorite = false},
@@ -817,15 +820,15 @@ Pattern patterns[] = {
 
         Pattern{.name = "sr_pixel", .renderer = pixel, .huePause = 2000, .renderPause = 0, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_pixels", .renderer = pixels, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
-        Pattern{.name = "sr_ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
-        Pattern{.name = "sr_matrix", .renderer = matrixDown, .huePause = 2000, .renderPause = 40, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_ripple", .renderer = ripple, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = true},
+        Pattern{.name = "sr_matrix", .renderer = matrixDown, .huePause = 2000, .renderPause = 40, .soundReactive = true, .favorite = true},
         Pattern{.name = "sr_matrixup", .renderer = matrixUp, .huePause = 2000, .renderPause = 40, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_onesine", .renderer = onesine, .huePause = 2000, .renderPause = 30, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_fire", .renderer = firesr, .huePause = 2000, .renderPause = 5, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_splitfire", .renderer = splitfiresr, .huePause = 2000, .renderPause = 5, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_rainbowg", .renderer = rainbowg, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = false},
-        Pattern{.name = "sr_rainbowbit", .renderer = rainbowbit, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = false},
-        Pattern{.name = "sr_besin", .renderer = besin, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
+        Pattern{.name = "sr_rainbowbit", .renderer = rainbowbit, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = true},
+        Pattern{.name = "sr_besin", .renderer = besin, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = true},
         Pattern{.name = "sr_fillnoise", .renderer = fillnoise, .huePause = 2000, .renderPause = 20, .soundReactive = true, .favorite = false},
         Pattern{.name = "sr_plasma", .renderer = plasmasr, .huePause = 2000, .renderPause = 10, .soundReactive = true, .favorite = false},
 

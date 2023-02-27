@@ -30,6 +30,8 @@
                 let b = $('.led-selector #back').prop('checked');
                 $('.switch input').prop('checked', b ? d.back.on : d.front.on);
                 $('#brightness').prop('value', b ? d.back.brightness : d.front.brightness);
+                $('#brightv').html('Brightness: ' + (b ? d.back.brightness : d.front.brightness));
+
                 $('#effect').prop('value', b ? d.back.effect : d.front.effect);
                 $('#color').css('background-color', b ? d.back.rgb : d.front.rgb).val(b ? d.back.rgb : d.front.rgb);
                 $('#version').html(d.version);
@@ -143,6 +145,7 @@
 
             $('#brightness').change(function (e) {
                 let b = this.value;
+                $('#brightv').html('Brightness: ' + b);
                 send("/brightness", b);
                 console.log('Brightness: ', b);
             });
@@ -328,6 +331,7 @@
             position: relative;
             display: inline-block;
             width: 300px;
+            color: #aaa;
         }
 
         .brightness {
@@ -469,6 +473,7 @@
         </div>
         <p>
         <div class="brightnesscontainer">
+            <br><span id="brightv">Brightness</span><br>
             <input type="range" min="0" max="255" value="0" class="brightness" id="brightness">
         </div>
         <p>
@@ -503,6 +508,7 @@
                 <option value="vibrancy">Vibrancy</option>
                 <option value="fireworks">Fireworks</option>
                 <option value="pacifica">Pacifica</option>
+                <option value="murica">Tricolore</option>
                 <option value="embers">Embers</option>
                 <option value="twinklefairy">Fairy Lights</option>
                 <option value="twinkleplain">Twinkle Plain</option>
