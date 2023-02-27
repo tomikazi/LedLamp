@@ -7,7 +7,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2022.09.23.005"
+#define SW_VERSION      "2023.02.27.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -178,15 +178,13 @@ void setupWebSocket() {
 
 void handleOn() {
     ESP8266WebServer *server = gizmo.httpServer();
-    processCallback("/power", "on", &front);
-    processCallback("/power", "on", &back);
+    handlePower(true);
     server->send(200, "text/plain", "on\n");
 }
 
 void handleOff() {
     ESP8266WebServer *server = gizmo.httpServer();
-    processCallback("/power", "off", &front);
-    processCallback("/power", "off", &back);
+    handlePower(false);
     server->send(200, "text/plain", "off\n");
 }
 
@@ -197,6 +195,10 @@ void publishState(const char *topic, const char *value, Strip *strip) {
     gizmo.publish(stateTopic, (char *) value, true);
 }
 
+void handlePower(bool on) {
+    processCallback("/power", on ? "on" : "off", &front);
+    processCallback("/power", on ? "on" : "off", &back);
+}
 
 // Command processors
 void processOnOff(const char *value, Strip *strip) {
@@ -493,6 +495,7 @@ void prunePeers() {
 
     if (buddyTimestamp && buddyTimestamp < millis()) {
         buddyAvailable = false;
+        buddySilent = true;
         buddyTimestamp = 0;
         gizmo.debug("Deleted buddy");
     }
@@ -535,6 +538,8 @@ void handlePeers() {
     }
 }
 
+static uint8_t pon = 128;
+
 void handlePeer(Command command) {
     uint8_t ch = CH(command.op);
     uint16_t op = OP(command.op);
@@ -574,6 +579,13 @@ void handlePeer(Command command) {
                 buddyTimestamp = millis() + PEER_TIMEOUT;
                 buddySilent = command.data[0];
                 break;
+            case POWER_ON_OFF:
+                if (command.ctx & GROUP_MASK) {
+                    if (command.data[0] != pon) {
+                        handlePower(!front.on);
+                        pon = command.data[0];
+                    }
+                }
             default:
                 break;
         }
