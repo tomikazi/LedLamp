@@ -7,7 +7,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2024.01.31.011"
+#define SW_VERSION      "2024.02.01.020"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -92,12 +92,23 @@ uint16_t sampleavg = 0;
 uint16_t samplepeak = 0;
 uint16_t oldsample = 0;
 
-#define SAMPLE_TIMEOUT  100
+#define SAMPLE_TIMEOUT  250
 uint32_t lastSample = 0;
 
 #define SLEEP_TIMEOUT   30*60000
 uint32_t sleepTime = 0;
 uint32_t sleepDimmer = 100;
+
+#define ALONE_TIMEOUT  10000
+uint32_t homeAlone = 0;
+
+uint8_t peerCount = 0;
+
+#define DIAGNOSTICS "/diagnostics"
+bool diagnosticsOn = true;
+
+#define ALWAYS_PAIRED "/alwaysPaired"
+bool alwaysPaired = false;
 
 #define STARTUP_MILLIS  20000
 #define EVERY_X_MILLIS(T, N)  if (T < millis()) { T = millis() + N;
@@ -127,13 +138,14 @@ uint32_t sleepDimmer = 100;
 #include "murica.h"
 
 void setup() {
-    gizmo.useMulticast = true;
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL, onUpdate);
 
     gizmo.httpServer()->on("/on", handleOn);
     gizmo.httpServer()->on("/off", handleOff);
     gizmo.httpServer()->on("/channel", handleChannel);
+    gizmo.httpServer()->on("/diagnostics", handleDiagnostics);
+    gizmo.httpServer()->on("/alwaysPaired", handleAlwaysPaired);
     gizmo.setupWebRoot();
     setupWebSocket();
 
@@ -152,6 +164,9 @@ void setup() {
     gizmo.addTopic("%s/back/effect");
 
     setupLED();
+
+    diagnosticsOn = SPIFFS.exists(DIAGNOSTICS);
+    alwaysPaired = SPIFFS.exists(ALWAYS_PAIRED);
     gizmo.endSetup();
 }
 
@@ -191,6 +206,19 @@ void handleOff() {
     server->send(200, "text/plain", "off\n");
 }
 
+void handleDiagnostics() {
+    ESP8266WebServer *server = gizmo.httpServer();
+    diagnosticsOn = !diagnosticsOn;
+    saveFlag(diagnosticsOn, DIAGNOSTICS);
+    server->send(200, "text/plain", diagnosticsOn ? "on\n" : "off\n");
+}
+
+void handleAlwaysPaired() {
+    ESP8266WebServer *server = gizmo.httpServer();
+    alwaysPaired = !alwaysPaired;
+    saveFlag(alwaysPaired, ALWAYS_PAIRED);
+    server->send(200, "text/plain", alwaysPaired ? "on\n" : "off\n");
+}
 
 void publishState(const char *topic, const char *value, Strip *strip) {
     char stateTopic[64];
@@ -487,15 +515,31 @@ void pruneSample() {
         sampleavg = 0;
         samplepeak = 0;
         oldsample = 0;
-        lastSample = 0;
+    }
+}
+
+void handleMulticastRepair() {
+    if (!buddyAvailable && !peerCount) {
+        if (!homeAlone) {
+            homeAlone = millis();
+        }
+    } else {
+        homeAlone = 0;
+    }
+
+    if (homeAlone && homeAlone + ALONE_TIMEOUT < millis()) {
+        homeAlone = 0;
+        gizmo.scheduleRestart();
     }
 }
 
 void prunePeers() {
     uint32_t now = millis();
-    uint8_t peerCount = 0;
+    bool hadPeersOrBuddy = peerCount || buddyAvailable;
+
+    peerCount = 0;
     for (int i = 1; i < MAX_PEERS; i++) {
-        if (peers[i].ip && peers[i].lastHeard + PEER_TIMEOUT < now) {
+        if (peers[i].ip && peers[i].lastHeard && peers[i].lastHeard + PEER_TIMEOUT < now) {
             gizmo.debug("Deleted peer %s", IPAddress(peers[i].ip).toString().c_str());
             peers[i].ip = 0;
             peers[i].lastHeard = 0;
@@ -511,6 +555,10 @@ void prunePeers() {
         buddyTimestamp = 0;
         gizmo.debug("Deleted buddy");
         broadcastState(false);
+    }
+
+    if (hadPeersOrBuddy || homeAlone || alwaysPaired) {
+        handleMulticastRepair();
     }
 
     gizmo.debug("peerCount=%d, buddyAvailable=%d", peerCount, buddyAvailable);
@@ -629,12 +677,14 @@ void handleLEDs(Strip *strip) {
         EVERY_X_MILLIS(strip->t1, renderPause)
             strip->pattern->renderer(strip);
             strip->leds[0] = WiFi.status() != WL_CONNECTED ? CRGB::Red : strip->leds[0];
+            showDiagnostics(strip);
             strip->ctl->showLeds(
                     sleepDimmer < 100 ? (uint8_t)((sleepDimmer * strip->brightness) / 100) : strip->brightness);
         }
     } else {
         blend(strip, strip->on ? strip->color : CRGB::Black, 0, strip->count);
         strip->leds[0] = WiFi.status() != WL_CONNECTED ? CRGB::Red : strip->leds[0];
+        showDiagnostics(strip);
         strip->ctl->showLeds(strip->brightness);
     }
 
@@ -652,6 +702,15 @@ void handleLEDs(Strip *strip) {
             }
             syncColorSettings(strip);
             syncPattern(strip);
+        }
+    }
+
+    // If we're waiting for samples on a sound reactive event, but none are coming, trigger pattern change
+    if (lastSample && lastSample + (10 * SAMPLE_TIMEOUT) < millis()) {
+        lastSample = 0;
+        if (strip->pattern->soundReactive) {
+            buddySilent = true;
+            strip->t0 = 0;
         }
     }
 
@@ -698,6 +757,24 @@ void loop() {
 
     handleLEDs(&front);
     handleLEDs(&back);
+}
+
+void showDiagnostics(Strip *strip) {
+    if (!diagnosticsOn) {
+        return;
+    }
+    int i = 0;
+    strip->leds[i++] = WiFi.status() == WL_CONNECTED ? CRGB::Blue : CRGB::Red;
+    strip->leds[i++] = master ? CRGB::Green : CRGB::Red;
+    strip->leds[i++] = peerCount ? CRGB::Green : CRGB::Red;
+    strip->leds[i++] = CRGB::Black;
+    strip->leds[i++] = buddyAvailable ? CRGB::Green : CRGB::Red;
+    strip->leds[i++] = !buddySilent ? CRGB::Green : CRGB::Red;
+    strip->leds[i++] = lastSample + SAMPLE_TIMEOUT > millis() ? CRGB::Green : CRGB::Red;
+    strip->leds[i++] = homeAlone ? CRGB::Blue : CRGB::Black;
+    strip->leds[i++] = CRGB::Black;
+    strip->leds[i++] = CRGB::Black;
+    strip->ctl->showLeds(strip->brightness);
 }
 
 void finishWiFiConnect() {
@@ -901,6 +978,11 @@ void loadFavorites() {
     File f = SPIFFS.open(FAVS, "r");
     favCount = 0;
     if (f) {
+        int n = ARRAY_SIZE(patterns);
+        for (int i = 0; i < n; i++) {
+            patterns[i].favorite = false;
+        }
+
         while (f.available()) {
             int l = f.readBytesUntil('\n', name, 31);
             name[l] = 0;
@@ -931,3 +1013,14 @@ void saveFavorites() {
     }
 }
 
+void saveFlag(boolean flag, const char *fileName) {
+    if (flag) {
+        File f = SPIFFS.open(fileName, "w");
+        if (f) {
+            f.printf("true\n");
+            f.close();
+        }
+    } else {
+        SPIFFS.remove(fileName);
+    }
+}
