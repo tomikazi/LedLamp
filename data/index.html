@@ -34,6 +34,14 @@
 
                 $('#effect').prop('value', b ? d.back.effect : d.front.effect);
                 $('#color').css('background-color', b ? d.back.rgb : d.front.rgb).val(b ? d.back.rgb : d.front.rgb);
+
+                if (d.buddyAvailable) {
+                    $('#buddy').html(d.buddySilent ? 'Silent' : 'Sound Detected');
+                    $('#buddy').css('color', !d.buddySilent ? '#00ffaf' : '#ffaf00');
+                } else {
+                    $('#buddy').html('');
+                }
+
                 $('#version').html(d.version);
                 masterIp = !d.isMaster ? d.masterIp : null;
                 sleep = d.sleep;
@@ -49,7 +57,7 @@
                 }
 
                 if (!d.isMaster) {
-                    $('#error').html('Controlled by ' + d.master.replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
+                    $('#error').html('Controlled by ' + d.master); // .replace(/([A-Z]+)/g, ' $1').replace(/^ /, ''));
                 } else if (sleep > 0 && sleep < 18000) {
                     let d = sleep/60;
                     let msg = d <= 1 ? 'Fading to sleep' : 'Sleeping in ' + Math.ceil(d) + ' minutes';
@@ -193,6 +201,16 @@
                 $('.led-selector label').css('background', '#ccc');
                 $('label[for="' + $(this).attr('id') + '"]').css('background', '#2196F3');
                 send("get", "status");
+
+              let b = $('.led-selector #back').prop('checked');
+              if (b) {
+                $('#effect').append($('<option>', {
+                  value: 'copy_front',
+                  text: 'Copy Front'
+                }));
+              } else {
+                $('#effect option[value="copy_front"]').remove();
+              }
             });
 
             $('#sched input[type=time]').change(function (e) {
@@ -224,17 +242,25 @@
             color: #ccc;
         }
 
-        #error {
+        #buddy {
             position: relative;
             display: inline-block;
             width: 300px;
             height: 32px;
-            padding: 8px 8px 0px 8px;
             background-color: #444;
-            color: #ffaf00;
             font-size: 18px;
         }
 
+        #error {
+          position: relative;
+          display: inline-block;
+          width: 300px;
+          height: 32px;
+          padding: 8px 8px 0px 8px;
+          background-color: #444;
+          color: #ffaf00;
+          font-size: 18px;
+        }
 
         .led-selector {
             position: relative;
@@ -394,19 +420,17 @@
         }
 
         #pallette {
-            display: inline-block;
-            margin: 0px 16px;
+            top: -32px;
         }
 
         #color {
             position: relative;
-            width: 32px;
-            height: 32px;
+            width: 100%;
+            height: 100%;
             background-color: #f00;
             border: 2px solid #777;
             border-radius: 50%;
             padding: 8px;
-            top: -20px;
         }
 
         .toggle {
@@ -526,9 +550,12 @@
         <p>
         <div id="icons">
             <div id="fav" class="toggle"></div>
-            <div id="pallette"><input type="color" name="color" id="color" value="#ff0000"/></div>
             <div id="sleep" class="toggle"></div>
             <div id="sync" class="toggle"></div>
+            <br>
+            <div id="pallette" class="toggle"><input type="color" name="color" id="color" value="#ff0000"/></div>
+            <p>
+            <div id="buddy"></div>
         </div>
         <div>
             <p>

@@ -7,7 +7,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2023.02.27.002"
+#define SW_VERSION      "2024.01.31.011"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -33,10 +33,10 @@ typedef void (*Renderer)(Strip *);
 typedef struct Pattern {
     const char *name;
     Renderer renderer;
-    int32_t  huePause;
-    int32_t  renderPause;
-    boolean  soundReactive;
-    boolean  favorite;
+    int32_t huePause;
+    int32_t renderPause;
+    boolean soundReactive;
+    boolean favorite;
 } Pattern;
 
 typedef enum {
@@ -92,7 +92,7 @@ uint16_t sampleavg = 0;
 uint16_t samplepeak = 0;
 uint16_t oldsample = 0;
 
-#define SAMPLE_TIMEOUT  1000
+#define SAMPLE_TIMEOUT  100
 uint32_t lastSample = 0;
 
 #define SLEEP_TIMEOUT   30*60000
@@ -127,6 +127,7 @@ uint32_t sleepDimmer = 100;
 #include "murica.h"
 
 void setup() {
+    gizmo.useMulticast = true;
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL, onUpdate);
 
@@ -155,9 +156,10 @@ void setup() {
 }
 
 void setupLED() {
-    FastLED.setMaxPowerInVoltsAndMilliamps(5,2400);
+    FastLED.setMaxPowerInVoltsAndMilliamps(5, 2400);
 
-    front.ctl = &FastLED.addLeds<LED_TYPE, FRONT_PIN, COLOR_ORDER>(frontLeds, front.count).setCorrection(TypicalLEDStrip);
+    front.ctl = &FastLED.addLeds<LED_TYPE, FRONT_PIN, COLOR_ORDER>(frontLeds, front.count).setCorrection(
+            TypicalLEDStrip);
     fadeToBlackBy(frontLeds, front.count, 255);
     front.ctl->showLeds(front.brightness);
     front.pattern = findPattern("gradient");
@@ -480,11 +482,20 @@ void copyColorSettings(Command command) {
     }
 }
 
+void pruneSample() {
+    if (lastSample && lastSample + SAMPLE_TIMEOUT < millis()) {
+        sampleavg = 0;
+        samplepeak = 0;
+        oldsample = 0;
+        lastSample = 0;
+    }
+}
+
 void prunePeers() {
     uint32_t now = millis();
     uint8_t peerCount = 0;
     for (int i = 1; i < MAX_PEERS; i++) {
-        if (peers[i].ip && peers[i].lastHeard < now) {
+        if (peers[i].ip && peers[i].lastHeard + PEER_TIMEOUT < now) {
             gizmo.debug("Deleted peer %s", IPAddress(peers[i].ip).toString().c_str());
             peers[i].ip = 0;
             peers[i].lastHeard = 0;
@@ -494,26 +505,20 @@ void prunePeers() {
     }
     determineMaster();
 
-    if (buddyTimestamp < millis()) {
+    if (buddyTimestamp && buddyTimestamp + PEER_TIMEOUT < now) {
         buddyAvailable = false;
         buddySilent = true;
         buddyTimestamp = 0;
         gizmo.debug("Deleted buddy");
+        broadcastState(false);
     }
 
     gizmo.debug("peerCount=%d, buddyAvailable=%d", peerCount, buddyAvailable);
-
-    if (peerCount && buddyAvailable) {
-        hadBuddyAndPeer = true;
-
-    } else if (!peerCount && !buddyAvailable && hadBuddyAndPeer) {
-        gizmo.debug("Restarting group");
-        group.flush();
-    }
 }
 
 void handlePeers() {
-    EVERY_N_SECONDS(3) {
+    EVERY_N_SECONDS(1)
+    {
         prunePeers();
         sayHello();
         requestSamples();
@@ -522,15 +527,6 @@ void handlePeers() {
     Command command;
     while (group.parsePacket()) {
         int len = group.read((char *) &command, sizeof(command));
-        if (len < 0) {
-            gizmo.debug("Unable to read command!!!!");
-        } else {
-            handlePeer(command);
-        }
-    }
-
-    while (peer.parsePacket()) {
-        int len = peer.read((char *) &command, sizeof(command));
         if (len < 0) {
             gizmo.debug("Unable to read command!!!!");
         } else {
@@ -546,7 +542,12 @@ void handlePeer(Command command) {
     uint16_t op = OP(command.op);
 
     if (command.src != (uint32_t) WiFi.localIP() && ch == channel) {
+        bool wasSilent = buddySilent;
         switch (op) {
+            case SAMPLE:
+                handleSample(command);
+                break;
+
             case HELLO:
                 if (command.ctx & GROUP_MASK) {
                     addPeer(command.src, (char *) command.data);
@@ -573,12 +574,16 @@ void handlePeer(Command command) {
                 break;
             case SAMPLE_ADV:
                 if (!buddyAvailable) {
+                    broadcastState(false);
                     gizmo.debug("Discovered buddy");
                 }
                 buddyIp = command.src;
                 buddyAvailable = true;
-                buddyTimestamp = millis() + PEER_TIMEOUT;
+                buddyTimestamp = millis();
                 buddySilent = command.data[0];
+                if (buddySilent != wasSilent) {
+                    broadcastState(false);
+                }
                 break;
             case POWER_ON_OFF:
                 if (command.ctx & GROUP_MASK) {
@@ -594,10 +599,19 @@ void handlePeer(Command command) {
     }
 }
 
+void handleSample(Command cmd) {
+    MicSample sample;
+    decodeSample(&cmd, &sample);
+    samplepeak = sample.samplepeak;
+    sampleavg = sample.sampleavg;
+    oldsample = sample.oldsample;
+    lastSample = millis();
+}
 
 void handleLEDs(Strip *strip) {
     if (strip->on && strip->pattern) {
-        uint32_t renderPause = strip->pattern->renderPause > 0 ? strip->pattern->renderPause : -strip->pattern->renderPause;
+        uint32_t renderPause =
+                strip->pattern->renderPause > 0 ? strip->pattern->renderPause : -strip->pattern->renderPause;
 
         if (strip->pattern->renderPause > 0) {
             EVERY_X_MILLIS(strip->tb, 20)
@@ -670,28 +684,10 @@ void handleSleep() {
     }
 }
 
-void handleSamples() {
-    if (lastSample && lastSample < millis()) {
-        lastSample = 0;
-        samplepeak = 0;
-        sampleavg = 0;
-        oldsample = 0;
-    }
-
-    MicSample sample;
-    while (buddy.parsePacket()) {
-        buddy.read((char *) &sample, sizeof(sample));
-        samplepeak = sample.samplepeak;
-        sampleavg = sample.sampleavg;
-        oldsample = sample.oldsample;
-        lastSample = millis() + SAMPLE_TIMEOUT;
-    }
-}
-
 void loop() {
     if (gizmo.isNetworkAvailable(finishWiFiConnect)) {
+        pruneSample();
         handlePeers();
-        handleSamples();
     }
     wsServer.loop();
 
@@ -792,9 +788,14 @@ void saveState() {
     }
 }
 
+void copyFront(Strip *s) {
+    memmove(&s->leds[0], &front.leds[0], s->count * sizeof(CRGB));
+}
+
 
 // Setup a catalog of the different patterns.
 Pattern patterns[] = {
+        Pattern{.name = "copy_front", .renderer = copyFront, .huePause = 2000, .renderPause = -10, .soundReactive = false, .favorite = false},
         Pattern{.name = "glitter", .renderer = glitter, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "confetti", .renderer = confetti, .huePause = 20, .renderPause = 20, .soundReactive = false, .favorite = false},
         Pattern{.name = "cycle", .renderer = cycle, .huePause = 200, .renderPause = 20, .soundReactive = false, .favorite = false},
@@ -868,7 +869,7 @@ Pattern *randomPattern(Strip *s) {
     }
 
     do {
-        p = &patterns[random8(ARRAY_SIZE(patterns) - 1)];
+        p = &patterns[1 + random8(ARRAY_SIZE(patterns) - 2)];
     } while ((mode == FAVORITES && (!p->favorite || (p->soundReactive && buddySilent))) ||
              (mode == SOUND_REACTIVE && !p->soundReactive) ||
              (mode == NOT_SOUND_REACTIVE && p->soundReactive));
