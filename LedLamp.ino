@@ -7,7 +7,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2024.02.06.001"
+#define SW_VERSION      "2024.02.08.004"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -99,7 +99,7 @@ uint32_t lastSample = 0;
 uint32_t sleepTime = 0;
 uint32_t sleepDimmer = 100;
 
-#define ALONE_TIMEOUT  10000
+#define ALONE_TIMEOUT  5*60000
 uint32_t homeAlone = 0;
 
 uint8_t peerCount = 0;
@@ -778,6 +778,8 @@ void showDiagnostics(Strip *strip) {
 }
 
 void finishWiFiConnect() {
+    Serial.printf("%s finishing setup\n", LED_LIGHTS);
+
     peers[0].ip = (uint32_t) WiFi.localIP();
     strcpy(peers[0].name, gizmo.getHostname());
 
