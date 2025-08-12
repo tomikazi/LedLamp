@@ -7,7 +7,7 @@
 
 #define LED_LIGHTS      "LedLamp"
 #define SW_UPDATE_URL   "http://iot.vachuska.com/LedLamp.ino.bin"
-#define SW_VERSION      "2024.02.08.004"
+#define SW_VERSION      "2025.08.11.001"
 
 #define STATE      "/cfg/state"
 #define FAVS       "/cfg/favs"
@@ -141,8 +141,12 @@ void setup() {
     gizmo.beginSetup(LED_LIGHTS, SW_VERSION, "gizmo123");
     gizmo.setUpdateURL(SW_UPDATE_URL, onUpdate);
 
-    gizmo.httpServer()->on("/on", handleOn);
-    gizmo.httpServer()->on("/off", handleOff);
+    gizmo.httpServer()->on("/on", HTTP_OPTIONS, handleOn);
+    gizmo.httpServer()->on("/on", HTTP_GET, handleOn);
+    gizmo.httpServer()->on("/off", HTTP_OPTIONS, handleOff);
+    gizmo.httpServer()->on("/off", HTTP_GET, handleOff);
+    gizmo.httpServer()->on("/power", HTTP_OPTIONS, handlePowerState);
+    gizmo.httpServer()->on("/power", HTTP_GET, handlePowerState);
     gizmo.httpServer()->on("/channel", handleChannel);
     gizmo.httpServer()->on("/diagnostics", handleDiagnostics);
     gizmo.httpServer()->on("/alwaysPaired", handleAlwaysPaired);
@@ -194,16 +198,36 @@ void setupWebSocket() {
     Serial.println("WebSocket server setup.");
 }
 
+// Common CORS headers
+void sendCorsHeaders() {
+    gizmo.httpServer()->sendHeader("Access-Control-Allow-Origin", "*"); // Adjust for production
+    gizmo.httpServer()->sendHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    gizmo.httpServer()->sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    gizmo.httpServer()->sendHeader("Access-Control-Max-Age", "86400");
+}
+
+void handleOptions() {
+    sendCorsHeaders();
+    gizmo.httpServer()->send(204); // No Content for OPTIONS
+}
+
 void handleOn() {
-    ESP8266WebServer *server = gizmo.httpServer();
     handlePower(true);
-    server->send(200, "text/plain", "on\n");
 }
 
 void handleOff() {
-    ESP8266WebServer *server = gizmo.httpServer();
     handlePower(false);
-    server->send(200, "text/plain", "off\n");
+}
+
+void handlePower(bool on) {
+    sendCorsHeaders();
+    onOff(on);
+    gizmo.httpServer()->send(200, "text/plain", on ? "on" : "off");
+}
+
+void handlePowerState() {
+    sendCorsHeaders();
+    gizmo.httpServer()->send(200, "text/plain", front.on || back.on ? "on" : "off");
 }
 
 void handleDiagnostics() {
@@ -226,7 +250,7 @@ void publishState(const char *topic, const char *value, Strip *strip) {
     gizmo.publish(stateTopic, (char *) value, true);
 }
 
-void handlePower(bool on) {
+void onOff(bool on) {
     processCallback("/power", on ? "on" : "off", &front);
     processCallback("/power", on ? "on" : "off", &back);
 }
@@ -636,7 +660,7 @@ void handlePeer(Command command) {
             case POWER_ON_OFF:
                 if (command.ctx & GROUP_MASK) {
                     if (command.data[0] != pon) {
-                        handlePower(!front.on);
+                        onOff(!front.on);
                         pon = command.data[0];
                     }
                 }
